@@ -1,0 +1,55 @@
+# À chaque push sur main : vérifications, puis mise en ligne sur le VPS.
+# Secrets à créer dans GitHub → Settings → Secrets and variables → Actions :
+#   VPS_HOST (IP du VPS), VPS_USER (ex. deploy), VPS_SSH_KEY (clé privée), VPS_PORT (optionnel, 22 par défaut)
+name: Vérifier et déployer
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: deploiement-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  deployer:
+    needs: verifier
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      CIBLE: ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
+      PORT_SSH: ${{ secrets.VPS_PORT || '22' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Préparer la clé SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_deploiement
+          chmod 600 ~/.ssh/id_deploiement
+          ssh-keyscan -p "$PORT_SSH" -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+      - name: Envoyer le code sur le VPS
+        # .env et les sauvegardes du serveur sont exclus : jamais écrasés ni supprimés.
+        run: |
+          rsync -az --delete \
+            --exclude .git --exclude node_modules --exclude .next --exclude .env --exclude sauvegardes \
+            -e "ssh -i ~/.ssh/id_deploiement -p $PORT_SSH" \
+            ./ "$CIBLE:/opt/fretpei/"
+      - name: Reconstruire et redémarrer
+        run: |
+          ssh -i ~/.ssh/id_deploiement -p "$PORT_SSH" "$CIBLE" \
+            "cd /opt/fretpei && docker compose up -d --build --remove-orphans && docker image prune -f"

@@ -1,6 +1,5 @@
--- Schéma initial : profils, transporteurs, comptes pro (magasins), commandes.
--- Les écritures sensibles passent par le serveur (clé service_role) ;
--- le RLS limite ce que chaque utilisateur peut lire avec la clé publique.
+-- Schéma initial : utilisateurs, sessions, transporteurs, comptes pro (magasins), commandes.
+-- Toutes les requêtes passent par le serveur Next.js : aucun accès direct depuis le navigateur.
 
 create type role_utilisateur as enum ('client', 'transporteur', 'admin');
 create type statut_transporteur as enum ('en_attente', 'valide', 'refuse', 'suspendu');
@@ -14,16 +13,33 @@ create type statut_commande as enum (
 );
 create type vehicule as enum ('petit', 'moyen', 'grand');
 
-create table profils (
-  id uuid primary key references auth.users on delete cascade,
+create table utilisateurs (
+  id uuid primary key default gen_random_uuid(),
+  email text not null unique,
   role role_utilisateur not null default 'client',
   nom text,
   telephone text,
   cree_le timestamptz not null default now()
 );
 
+-- Liens de connexion envoyés par e-mail (on ne stocke que l'empreinte SHA-256 du jeton).
+create table jetons_connexion (
+  empreinte text primary key,
+  email text not null,
+  expire_le timestamptz not null,
+  utilise_le timestamptz
+);
+
+create table sessions (
+  empreinte text primary key,
+  utilisateur_id uuid not null references utilisateurs on delete cascade,
+  expire_le timestamptz not null,
+  cree_le timestamptz not null default now()
+);
+create index sessions_utilisateur_idx on sessions (utilisateur_id);
+
 create table transporteurs (
-  id uuid primary key references profils on delete cascade,
+  id uuid primary key references utilisateurs on delete cascade,
   statut statut_transporteur not null default 'en_attente',
   raison_sociale text not null,
   siret text not null,
@@ -31,7 +47,7 @@ create table transporteurs (
   assurance_marchandises text not null,     -- assureur + n° de police
   vehicule vehicule not null,
   immatriculation text not null,
-  stripe_account_id text,
+  stripe_account_id text unique,
   stripe_pret boolean not null default false,
   abonnement_pro boolean not null default false,
   cree_le timestamptz not null default now()
@@ -39,7 +55,7 @@ create table transporteurs (
 
 create table comptes_pro (
   id uuid primary key default gen_random_uuid(),
-  proprietaire uuid not null references profils on delete cascade,
+  proprietaire uuid not null references utilisateurs on delete cascade,
   raison_sociale text not null,
   siret text,
   remise_taux numeric(4,3) not null default 0, -- remise négociée sur le transport
@@ -53,7 +69,7 @@ create table commandes (
   code_livraison text not null default lpad((floor(random() * 10000))::int::text, 4, '0'),
   statut statut_commande not null default 'attente_paiement',
 
-  client_id uuid references profils on delete set null, -- null = commande invité
+  client_id uuid references utilisateurs on delete set null, -- null = commande invité
   compte_pro_id uuid references comptes_pro on delete set null,
   client_nom text not null,
   client_telephone text not null,
@@ -93,41 +109,3 @@ create table commandes (
 
 create index commandes_statut_idx on commandes (statut, date_enlevement);
 create index commandes_transporteur_idx on commandes (transporteur_id);
-
--- Crée le profil à l'inscription.
-create function public.creer_profil() returns trigger
-language plpgsql security definer set search_path = public as $$
-begin
-  insert into profils (id) values (new.id);
-  return new;
-end $$;
-
-create trigger a_l_inscription after insert on auth.users
-  for each row execute function public.creer_profil();
-
-create function public.est_admin() returns boolean
-language sql stable security definer set search_path = public as $$
-  select exists (select 1 from profils where id = auth.uid() and role = 'admin');
-$$;
-
-alter table profils enable row level security;
-alter table transporteurs enable row level security;
-alter table comptes_pro enable row level security;
-alter table commandes enable row level security;
-
-create policy "profil: soi-même ou admin" on profils
-  for select using (id = auth.uid() or est_admin());
-
-create policy "transporteur: soi-même ou admin" on transporteurs
-  for select using (id = auth.uid() or est_admin());
-
-create policy "compte pro: propriétaire ou admin" on comptes_pro
-  for select using (proprietaire = auth.uid() or est_admin());
-
-create policy "commandes: client, transporteur assigné ou admin" on commandes
-  for select using (
-    client_id = auth.uid()
-    or transporteur_id = auth.uid()
-    or est_admin()
-    or compte_pro_id in (select id from comptes_pro where proprietaire = auth.uid())
-  );

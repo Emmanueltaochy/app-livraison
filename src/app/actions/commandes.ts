@@ -5,7 +5,8 @@ import { z } from "zod";
 import { getCommune } from "@/lib/communes";
 import { calculerDevis } from "@/lib/pricing";
 import { paiementDemo, stripe, stripeConfigure, urlSite } from "@/lib/stripe";
-import { supabaseAdmin, utilisateurCourant } from "@/lib/supabase/server";
+import { utilisateurCourant } from "@/lib/auth";
+import { requete, une } from "@/lib/db";
 import { MARQUE } from "@/lib/config";
 
 const coche = z.preprocess((v) => v === "on" || v === "true", z.boolean());
@@ -62,44 +63,57 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
   });
 
   const utilisateur = await utilisateurCourant().catch(() => null);
-  const sb = supabaseAdmin();
+  const comptePro = utilisateur
+    ? await une<{ id: string }>("select id from comptes_pro where proprietaire = $1 limit 1", [utilisateur.id])
+    : null;
 
-  let compteProId: string | null = null;
-  if (utilisateur) {
-    const { data } = await sb.from("comptes_pro").select("id").eq("proprietaire", utilisateur.id).maybeSingle();
-    compteProId = data?.id ?? null;
+  let commande: { id: string; reference: string; jeton_suivi: string } | null;
+  try {
+    commande = await une(
+      `insert into commandes (
+         client_id, compte_pro_id, client_nom, client_telephone, client_email,
+         commune_depart, adresse_depart, commune_arrivee, adresse_arrivee, date_enlevement, description,
+         vehicule, aide_manutention, etages_depart, etages_arrivee, assurance_renforcee, express,
+         distance_km, transport_cts, frais_service_cts, total_cts, commission_cts, remuneration_transporteur_cts
+       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+       returning id, reference, jeton_suivi`,
+      [
+        utilisateur?.id ?? null,
+        comptePro?.id ?? null,
+        f.client_nom,
+        f.client_telephone,
+        f.client_email,
+        f.commune_depart,
+        f.adresse_depart,
+        f.commune_arrivee,
+        f.adresse_arrivee,
+        f.date_enlevement,
+        f.description,
+        f.vehicule,
+        f.aide_manutention,
+        f.etages_depart,
+        f.etages_arrivee,
+        f.assurance_renforcee,
+        f.express,
+        devis.distanceKm,
+        devis.transportCts,
+        devis.fraisServiceCts,
+        devis.totalCts,
+        devis.commissionCts,
+        devis.remunerationTransporteurCts,
+      ],
+    );
+  } catch (e) {
+    console.error("creerCommande", e);
+    commande = null;
   }
-
-  const { data: commande, error } = await sb
-    .from("commandes")
-    .insert({
-      ...f,
-      date_enlevement: f.date_enlevement.toISOString(),
-      client_id: utilisateur?.id ?? null,
-      compte_pro_id: compteProId,
-      distance_km: devis.distanceKm,
-      transport_cts: devis.transportCts,
-      frais_service_cts: devis.fraisServiceCts,
-      total_cts: devis.totalCts,
-      commission_cts: devis.commissionCts,
-      remuneration_transporteur_cts: devis.remunerationTransporteurCts,
-    })
-    .select("id, reference, jeton_suivi")
-    .single();
-
-  if (error || !commande) {
-    console.error("creerCommande", error);
-    return { erreur: "Impossible d'enregistrer la commande, réessayez." };
-  }
+  if (!commande) return { erreur: "Impossible d'enregistrer la commande, réessayez." };
 
   const suivi = `${urlSite()}/suivi/${commande.jeton_suivi}`;
 
   if (!stripeConfigure()) {
     if (!paiementDemo()) return { erreur: "Le paiement en ligne n'est pas encore configuré." };
-    await sb
-      .from("commandes")
-      .update({ statut: "payee", payee_le: new Date().toISOString() })
-      .eq("id", commande.id);
+    await requete("update commandes set statut = 'payee', payee_le = now() where id = $1", [commande.id]);
     redirect(`/suivi/${commande.jeton_suivi}?paye=1`);
   }
 
@@ -131,6 +145,6 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
     custom_text: { submit: { message: `Commande ${commande.reference} — ${MARQUE}` } },
   });
 
-  await sb.from("commandes").update({ stripe_session_id: session.id }).eq("id", commande.id);
+  await requete("update commandes set stripe_session_id = $2 where id = $1", [commande.id, session.id]);
   redirect(session.url!);
 }

@@ -4,7 +4,9 @@ import { getCommune } from "@/lib/communes";
 import { euros, VEHICULES } from "@/lib/pricing";
 import { dateReunion, STATUTS } from "@/lib/statuts";
 import { stripe, stripeConfigure } from "@/lib/stripe";
-import { exigerConnexion, supabaseAdmin } from "@/lib/supabase/server";
+import { exigerConnexion } from "@/lib/auth";
+import { requete, une } from "@/lib/db";
+import type { Transporteur } from "@/app/actions/transporteur";
 import { FormulaireInscription } from "./FormulaireInscription";
 import { FormulaireLivraison } from "./FormulaireLivraison";
 
@@ -14,8 +16,7 @@ const nomCommune = (id: string) => getCommune(id)?.nom ?? id;
 
 export default async function EspaceTransporteur() {
   const u = await exigerConnexion("/transporteur");
-  const sb = supabaseAdmin();
-  const { data: t } = await sb.from("transporteurs").select("*").eq("id", u.id).maybeSingle();
+  const t = await une<Transporteur>("select * from transporteurs where id = $1", [u.id]);
 
   const entete = (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -62,27 +63,21 @@ export default async function EspaceTransporteur() {
   if (t.stripe_account_id && !stripePret && stripeConfigure()) {
     const compte = await stripe().accounts.retrieve(t.stripe_account_id);
     stripePret = Boolean(compte.charges_enabled && compte.payouts_enabled);
-    if (stripePret) await sb.from("transporteurs").update({ stripe_pret: true }).eq("id", t.id);
+    if (stripePret) await requete("update transporteurs set stripe_pret = true where id = $1", [t.id]);
   }
 
-  const [{ data: disponibles }, { data: mesCourses }] = await Promise.all([
-    sb
-      .from("commandes")
-      .select("id, reference, commune_depart, commune_arrivee, date_enlevement, description, vehicule, distance_km, aide_manutention, express, remuneration_transporteur_cts")
-      .eq("statut", "payee")
-      .is("transporteur_id", null)
-      .order("date_enlevement")
-      .limit(50),
-    sb
-      .from("commandes")
-      .select("*")
-      .eq("transporteur_id", t.id)
-      .order("date_enlevement", { ascending: false })
-      .limit(50),
+  const [disponibles, mesCourses] = await Promise.all([
+    requete(
+      `select id, reference, commune_depart, commune_arrivee, date_enlevement, description, vehicule, distance_km,
+              aide_manutention, express, remuneration_transporteur_cts
+       from commandes where statut = 'payee' and transporteur_id is null
+       order by date_enlevement limit 50`,
+    ),
+    requete("select * from commandes where transporteur_id = $1 order by date_enlevement desc limit 50", [t.id]),
   ]);
 
-  const enCours = (mesCourses ?? []).filter((c) => ["acceptee", "enlevee"].includes(c.statut));
-  const terminees = (mesCourses ?? []).filter((c) => !["acceptee", "enlevee"].includes(c.statut));
+  const enCours = mesCourses.filter((c) => ["acceptee", "enlevee"].includes(c.statut));
+  const terminees = mesCourses.filter((c) => !["acceptee", "enlevee"].includes(c.statut));
   const gainsCts = terminees.filter((c) => c.statut === "livree").reduce((s, c) => s + c.remuneration_transporteur_cts, 0);
 
   return (
@@ -132,9 +127,9 @@ export default async function EspaceTransporteur() {
 
       <section>
         <h2 className="mb-3 text-xl font-bold">Courses disponibles</h2>
-        {(disponibles ?? []).length === 0 && <p className="text-slate-500">Aucune course disponible pour le moment.</p>}
+        {disponibles.length === 0 && <p className="text-slate-500">Aucune course disponible pour le moment.</p>}
         <div className="grid gap-4 md:grid-cols-2">
-          {(disponibles ?? []).map((c) => (
+          {disponibles.map((c) => (
             <article key={c.id} className="carte space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <p className="font-semibold">{nomCommune(c.commune_depart)} → {nomCommune(c.commune_arrivee)}</p>

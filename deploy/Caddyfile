@@ -1,0 +1,9 @@
+# Certificat HTTPS Let's Encrypt obtenu et renouvelé automatiquement.
+{$DOMAINE} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}
+
+www.{$DOMAINE} {
+	redir https://{$DOMAINE}{uri} permanent
+}

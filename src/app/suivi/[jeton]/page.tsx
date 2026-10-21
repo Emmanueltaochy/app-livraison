@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getCommune } from "@/lib/communes";
 import { euros } from "@/lib/pricing";
 import { dateReunion, ETAPES, STATUTS } from "@/lib/statuts";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { une } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -18,16 +18,19 @@ export default async function Suivi({
   const { paye } = await searchParams;
   if (!/^[a-f0-9]{32}$/.test(jeton)) notFound();
 
-  const { data: c } = await supabaseAdmin()
-    .from("commandes")
-    .select("*, transporteurs(raison_sociale, vehicule, immatriculation, profils(nom, telephone))")
-    .eq("jeton_suivi", jeton)
-    .single();
+  const c = await une(
+    `select c.*, t.raison_sociale, t.immatriculation, u.nom as transporteur_nom, u.telephone as transporteur_telephone
+     from commandes c
+     left join transporteurs t on t.id = c.transporteur_id
+     left join utilisateurs u on u.id = c.transporteur_id
+     where c.jeton_suivi = $1`,
+    [jeton],
+  );
   if (!c) notFound();
 
-  const t = c.transporteurs as
-    | { raison_sociale: string; immatriculation: string; profils: { nom: string | null; telephone: string | null } | null }
-    | null;
+  const t = c.transporteur_id
+    ? { raison_sociale: c.raison_sociale, immatriculation: c.immatriculation, nom: c.transporteur_nom, telephone: c.transporteur_telephone }
+    : null;
   const statut = STATUTS[c.statut];
   const indexEtape = ETAPES.indexOf(c.statut);
 
@@ -60,10 +63,10 @@ export default async function Suivi({
       {t && (
         <div className="carte">
           <h2 className="font-semibold">Votre transporteur</h2>
-          <p>{t.profils?.nom ?? t.raison_sociale} — {t.raison_sociale}</p>
+          <p>{t.nom ?? t.raison_sociale} — {t.raison_sociale}</p>
           <p className="text-sm text-slate-600">Véhicule immatriculé {t.immatriculation}</p>
-          {t.profils?.telephone && (
-            <a href={`tel:${t.profils.telephone}`} className="bouton mt-3">Appeler {t.profils.telephone}</a>
+          {t.telephone && (
+            <a href={`tel:${t.telephone}`} className="bouton mt-3">Appeler {t.telephone}</a>
           )}
         </div>
       )}

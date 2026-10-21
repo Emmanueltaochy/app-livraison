@@ -9,7 +9,7 @@ export const STATUTS: Record<string, { libelle: string; couleur: string }> = {
 
 export const ETAPES = ["payee", "acceptee", "enlevee", "livree"] as const;
 
-export function dateReunion(iso: string): string {
+export function dateReunion(iso: string | Date): string {
   return new Date(iso).toLocaleString("fr-FR", {
     timeZone: "Indian/Reunion",
     weekday: "short",

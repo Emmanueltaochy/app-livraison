@@ -1,0 +1,69 @@
+# Production sur le VPS : application + PostgreSQL + HTTPS automatique (Caddy) + sauvegardes.
+# Les secrets sont lus dans le fichier .env à côté de ce fichier (voir .env.example).
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://fretpei:${POSTGRES_PASSWORD}@db:5432/fretpei
+    depends_on:
+      db:
+        condition: service_healthy
+    # Accessible uniquement depuis le VPS (pour un Nginx existant) ; le public passe par Caddy.
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fretpei
+      POSTGRES_DB: fretpei
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD dans .env}
+    volumes:
+      - donnees:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fretpei"]
+      interval: 5s
+      retries: 10
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAINE: ${DOMAINE:?définir DOMAINE dans .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy:/data
+    depends_on:
+      - app
+
+  # Sauvegarde quotidienne de la base dans ./sauvegardes (14 jours conservés).
+  sauvegarde:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./sauvegardes:/sauvegardes
+    entrypoint:
+      - sh
+      - -c
+      - |
+        while true; do
+          pg_dump -h db -U fretpei -Fc fretpei > /sauvegardes/fretpei-$$(date +%F).dump
+          find /sauvegardes -name '*.dump' -mtime +14 -delete
+          sleep 86400
+        done
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  donnees:
+  caddy:

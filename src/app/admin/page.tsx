@@ -2,7 +2,8 @@ import { annulerCommande, changerStatutTransporteur, relancerVirement } from "@/
 import { getCommune } from "@/lib/communes";
 import { euros, VEHICULES } from "@/lib/pricing";
 import { dateReunion, STATUTS } from "@/lib/statuts";
-import { exigerAdmin, supabaseAdmin } from "@/lib/supabase/server";
+import { exigerAdmin } from "@/lib/auth";
+import { requete } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -10,26 +11,24 @@ const nomCommune = (id: string) => getCommune(id)?.nom ?? id;
 
 export default async function Admin() {
   await exigerAdmin();
-  const sb = supabaseAdmin();
-  const debutMois = new Date();
-  debutMois.setUTCDate(1);
-  debutMois.setUTCHours(0, 0, 0, 0);
-
-  const [{ data: commandes }, { data: transporteurs }, { data: duMois }] = await Promise.all([
-    sb.from("commandes").select("*").order("cree_le", { ascending: false }).limit(100),
-    sb.from("transporteurs").select("*, profils(nom, telephone)").order("cree_le", { ascending: false }),
-    sb
-      .from("commandes")
-      .select("total_cts, commission_cts, frais_service_cts, statut")
-      .gte("payee_le", debutMois.toISOString())
-      .neq("statut", "annulee"),
+  const [commandes, transporteurs, mois] = await Promise.all([
+    requete("select * from commandes order by cree_le desc limit 100"),
+    requete(
+      `select t.*, u.nom, u.telephone, u.email from transporteurs t join utilisateurs u on u.id = t.id
+       order by t.cree_le desc`,
+    ),
+    // Mois calendaire en heure de La Réunion.
+    requete(
+      `select total_cts, commission_cts, frais_service_cts from commandes
+       where statut <> 'annulee'
+         and payee_le >= date_trunc('month', now() at time zone 'Indian/Reunion') at time zone 'Indian/Reunion'`,
+    ),
   ]);
 
-  const mois = duMois ?? [];
   const volumeCts = mois.reduce((s, c) => s + c.total_cts, 0);
   const margeCts = mois.reduce((s, c) => s + c.commission_cts + c.frais_service_cts, 0);
-  const aValider = (transporteurs ?? []).filter((t) => t.statut === "en_attente");
-  const enAttente = (commandes ?? []).filter((c) => c.statut === "payee");
+  const aValider = transporteurs.filter((t) => t.statut === "en_attente");
+  const enAttente = commandes.filter((c) => c.statut === "payee");
 
   const indicateurs = [
     { libelle: "Volume payé ce mois", valeur: euros(volumeCts) },
@@ -56,8 +55,8 @@ export default async function Admin() {
         <div className="grid gap-3 md:grid-cols-2">
           {aValider.map((t) => (
             <article key={t.id} className="carte space-y-1 text-sm">
-              <p className="font-semibold">{t.profils?.nom} — {t.raison_sociale}</p>
-              <p>📞 {t.profils?.telephone}</p>
+              <p className="font-semibold">{t.nom} — {t.raison_sociale}</p>
+              <p>📞 {t.telephone} · {t.email}</p>
               <p>SIRET {t.siret} · Registre {t.numero_registre_transport}</p>
               <p>Assurance : {t.assurance_marchandises}</p>
               <p>{VEHICULES[t.vehicule as keyof typeof VEHICULES].nom} · {t.immatriculation}</p>
@@ -93,7 +92,7 @@ export default async function Admin() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {(commandes ?? []).map((c) => (
+              {commandes.map((c) => (
                 <tr key={c.id}>
                   <td className="p-3 font-mono">{c.reference}</td>
                   <td className="p-3">{nomCommune(c.commune_depart)} → {nomCommune(c.commune_arrivee)}</td>

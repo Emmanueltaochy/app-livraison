@@ -25,42 +25,72 @@ code client à 4 chiffres. La trésorerie reste positive à tout moment.
 - **`/suivi/<jeton>`** — suivi de la commande par le client, avec le code de livraison.
 - **`/transporteur`** — inscription (SIRET, registre des transporteurs, assurance), activation des virements Stripe, courses disponibles, acceptation, chargement, livraison avec le code.
 - **`/admin`** — chiffre d'affaires et marge du mois, validation des transporteurs, commandes, annulations, relance des virements.
+- **`/connexion`** — connexion sans mot de passe par lien e-mail (transporteurs et admin).
 
 ## Stack
 
-Next.js 15 (App Router, Server Actions) · Supabase (Postgres + connexion par e-mail) · Stripe Checkout + Connect Express · Tailwind CSS · Capacitor (app mobile).
+Next.js 15 (App Router, Server Actions) · PostgreSQL 16 · Stripe Checkout + Connect Express · Tailwind CSS ·
+Docker Compose + Caddy (HTTPS automatique) sur VPS · Capacitor (app mobile).
 
-## Mise en route
+Aucun service payant hors Stripe : la base, l'hébergement et les e-mails tournent sur le VPS et la messagerie Hostinger.
 
-1. `npm install`
-2. Créer un projet sur [supabase.com](https://supabase.com) (gratuit), puis exécuter
-   `supabase/migrations/0001_init.sql` dans *SQL Editor*.
-3. Dans Supabase → *Authentication → URL Configuration*, ajouter `http://localhost:3000/auth/callback`
-   (et l'URL de production) aux *Redirect URLs*.
-4. `cp .env.example .env.local` et remplir les clés.
-5. `npm run dev` puis ouvrir http://localhost:3000.
+## Développement local
 
-Sans clé Stripe, `PAIEMENT_DEMO=1` simule le paiement en local pour tester tout le parcours.
+```bash
+npm install
+cp .env.example .env.local      # renseigner DATABASE_URL vers un PostgreSQL local
+node --env-file=.env.local scripts/migrer.mjs
+npm run dev                     # http://localhost:3000
+```
+
+Sans SMTP, les liens de connexion s'affichent dans le terminal. Sans Stripe, `PAIEMENT_DEMO=1` simule le paiement.
+
+## Mise en ligne sur le VPS Hostinger (une seule fois)
+
+1. **DNS** : chez le registraire du domaine, créer un enregistrement `A` vers l'IP du VPS (et `www` aussi).
+2. **Préparer le VPS** (en `root` via SSH) :
+   ```bash
+   curl -fsSL https://get.docker.com | sh
+   adduser --disabled-password --gecos "" deploy
+   usermod -aG docker deploy
+   mkdir -p /opt/fretpei /home/deploy/.ssh && chown deploy:deploy /opt/fretpei
+   ```
+3. **Clé de déploiement** (sur ton ordinateur) : `ssh-keygen -t ed25519 -f fretpei_deploy -N ""`,
+   puis coller le contenu de `fretpei_deploy.pub` dans `/home/deploy/.ssh/authorized_keys` sur le VPS
+   (`chown -R deploy:deploy /home/deploy/.ssh && chmod 600 /home/deploy/.ssh/authorized_keys`).
+4. **Secrets du serveur** : créer `/opt/fretpei/.env` à partir de `.env.example`
+   (mot de passe PostgreSQL long et aléatoire : `openssl rand -base64 32`), puis `chmod 600 /opt/fretpei/.env`.
+5. **Secrets GitHub** (*Settings → Secrets and variables → Actions*) : `VPS_HOST` (IP), `VPS_USER` (`deploy`),
+   `VPS_SSH_KEY` (contenu de la clé privée `fretpei_deploy`), et `VPS_PORT` si SSH n'est pas sur le port 22.
+6. **Pousser sur `main`** : GitHub Actions vérifie le code (lint, tests, build), l'envoie sur le VPS et
+   relance les conteneurs. Les migrations de base s'appliquent automatiquement au démarrage.
+
+Ensuite, **chaque push sur `main` met le site (et l'app mobile) à jour automatiquement.**
+
+> Si le VPS héberge déjà un site avec Nginx sur les ports 80/443, supprimer le service `caddy` de
+> `docker-compose.yml` et faire pointer Nginx vers `http://127.0.0.1:3000`.
 
 ### Devenir administrateur
 
-Se connecter une fois sur `/connexion`, puis dans Supabase (*SQL Editor*) :
+Se connecter une fois sur `/connexion`, puis sur le VPS :
 
-```sql
-update profils set role = 'admin' where id = (select id from auth.users where email = 'votre@email.fr');
+```bash
+cd /opt/fretpei && docker compose exec db psql -U fretpei -c \
+  "update utilisateurs set role = 'admin' where email = 'votre@email.fr';"
 ```
+
+### Sauvegardes
+
+Le service `sauvegarde` fait un `pg_dump` quotidien dans `/opt/fretpei/sauvegardes` (14 jours conservés).
+Restauration : `docker compose exec -T db pg_restore -U fretpei -d fretpei --clean < sauvegardes/<fichier>.dump`.
+Pense à copier régulièrement ce dossier hors du VPS.
 
 ### Stripe
 
 1. Activer **Connect** dans le tableau de bord Stripe (type de compte : Express).
-2. Ajouter un webhook vers `https://<votre-domaine>/api/stripe/webhook` avec les événements
-   `checkout.session.completed` et `account.updated` (cocher « événements des comptes connectés » pour ce dernier).
-3. En local : `stripe listen --forward-to localhost:3000/api/stripe/webhook --forward-connect-to localhost:3000/api/stripe/webhook`.
-
-## Mise en ligne
-
-Déployer sur [Vercel](https://vercel.com) (gratuit au départ) en important le dépôt GitHub et en
-recopiant les variables de `.env.local` (sans `PAIEMENT_DEMO`).
+2. Ajouter un webhook vers `https://<domaine>/api/stripe/webhook` avec les événements
+   `checkout.session.completed` et `account.updated` (cocher « événements des comptes connectés » pour ce dernier),
+   puis copier son secret dans `STRIPE_WEBHOOK_SECRET`.
 
 ## Application mobile (iOS / Android)
 
@@ -69,8 +99,8 @@ l'app sans republier sur les stores**. Une fois le site en ligne :
 
 ```bash
 npm i @capacitor/core @capacitor/cli @capacitor/ios @capacitor/android
-CAPACITOR_SERVER_URL=https://<votre-domaine> npx cap add android
-CAPACITOR_SERVER_URL=https://<votre-domaine> npx cap add ios   # nécessite un Mac + Xcode
+CAPACITOR_SERVER_URL=https://<domaine> npx cap add android
+CAPACITOR_SERVER_URL=https://<domaine> npx cap add ios   # nécessite un Mac + Xcode
 ```
 
 Pour être accepté par Apple, il faut ajouter de vraies fonctions natives (plugins `@capacitor/push-notifications`,
