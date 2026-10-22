@@ -30,7 +30,7 @@ code client à 4 chiffres. La trésorerie reste positive à tout moment.
 ## Stack
 
 Next.js 15 (App Router, Server Actions) · PostgreSQL 16 · Stripe Checkout + Connect Express · Tailwind CSS ·
-Docker Compose + Caddy (HTTPS automatique) sur VPS · Capacitor (app mobile).
+Docker Compose sur VPS (cohabite avec les autres applications du serveur) · Capacitor (app mobile).
 
 Aucun service payant hors Stripe : la base, l'hébergement et les e-mails tournent sur le VPS et la messagerie Hostinger.
 
@@ -50,7 +50,7 @@ Sans SMTP, les liens de connexion s'affichent dans le terminal. Sans Stripe, `PA
 1. **DNS** : chez le registraire du domaine, créer un enregistrement `A` vers l'IP du VPS (et `www` aussi).
 2. **Préparer le VPS** (en `root` via SSH) :
    ```bash
-   curl -fsSL https://get.docker.com | sh
+   docker --version || curl -fsSL https://get.docker.com | sh   # n'installe Docker que s'il manque
    adduser --disabled-password --gecos "" deploy
    usermod -aG docker deploy
    mkdir -p /opt/fretpei /home/deploy/.ssh && chown deploy:deploy /opt/fretpei
@@ -67,8 +67,15 @@ Sans SMTP, les liens de connexion s'affichent dans le terminal. Sans Stripe, `PA
 
 Ensuite, **chaque push sur `main` met le site (et l'app mobile) à jour automatiquement.**
 
-> Si le VPS héberge déjà un site avec Nginx sur les ports 80/443, supprimer le service `caddy` de
-> `docker-compose.yml` et faire pointer Nginx vers `http://127.0.0.1:3000`.
+### Cohabitation avec les autres applications du VPS
+
+- Tout est isolé sous le nom de projet Docker `fretpei` et le dossier `/opt/fretpei` : le déploiement ne touche rien d'autre.
+- Aucun port public n'est pris : l'app écoute sur `127.0.0.1:3100` (modifiable via `APP_PORT`), la base n'est pas exposée.
+- Le HTTPS passe par le reverse proxy déjà en place :
+  - **Nginx** : modèle prêt dans `deploy/nginx-fretpei.conf` (+ `certbot --nginx` pour le certificat) ;
+  - **Traefik / Coolify / autre** : déclarer le domaine vers `http://127.0.0.1:3100`.
+- Serveur vierge uniquement : `docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d` ajoute Caddy (ports 80/443, HTTPS automatique).
+- Mémoire limitée à 1 Go pour l'app et 1 Go pour la base, pour ne pas pénaliser les autres services.
 
 ### Devenir administrateur
 

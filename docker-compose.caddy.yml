@@ -1,0 +1,19 @@
+# Uniquement pour un serveur SANS autre site : Caddy prend les ports 80/443 et gère le HTTPS.
+# Usage : docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAINE: ${DOMAINE:?définir DOMAINE dans .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy:/data
+    depends_on:
+      - app
+
+volumes:
+  caddy:

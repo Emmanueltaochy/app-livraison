@@ -1,5 +1,12 @@
-# Production sur le VPS : application + PostgreSQL + HTTPS automatique (Caddy) + sauvegardes.
+# Production sur le VPS : application + PostgreSQL + sauvegardes.
+# Conçu pour cohabiter avec d'autres applications sur le même serveur :
+#  - nom de projet dédié (conteneurs, réseau et volumes préfixés « fretpei »),
+#  - aucun port public : l'app écoute sur 127.0.0.1:${APP_PORT} et la base n'est pas exposée,
+#  - le HTTPS est assuré par le reverse proxy déjà en place (Nginx, Traefik…), voir README.
+# Sur un serveur vierge, ajouter Caddy : docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d
 # Les secrets sont lus dans le fichier .env à côté de ce fichier (voir .env.example).
+
+name: fretpei
 
 services:
   app:
@@ -11,9 +18,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # Accessible uniquement depuis le VPS (pour un Nginx existant) ; le public passe par Caddy.
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${APP_PORT:-3100}:3000"
+    mem_limit: 1g
 
   db:
     image: postgres:16-alpine
@@ -28,20 +35,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U fretpei"]
       interval: 5s
       retries: 10
-
-  caddy:
-    image: caddy:2.8-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      DOMAINE: ${DOMAINE:?définir DOMAINE dans .env}
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy:/data
-    depends_on:
-      - app
+    mem_limit: 1g
 
   # Sauvegarde quotidienne de la base dans ./sauvegardes (14 jours conservés).
   sauvegarde:
@@ -66,4 +60,3 @@ services:
 
 volumes:
   donnees:
-  caddy:
