@@ -2,7 +2,7 @@
 
 import { MailCheck } from "lucide-react";
 import { useActionState } from "react";
-import { envoyerLien, validerCode } from "./actions";
+import { envoyerLien, validerCode } from "@/app/actions/connexion";
 
 // Étape 1 : e-mail. Étape 2 : code à 6 chiffres reçu par e-mail (indispensable dans l'app,
 // où le lien de l'e-mail s'ouvrirait dans Safari et non dans l'app).

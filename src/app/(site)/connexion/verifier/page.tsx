@@ -1,5 +1,5 @@
 import { LogIn } from "lucide-react";
-import { validerConnexion } from "../actions";
+import { validerConnexion } from "@/app/actions/connexion";
 
 // Un clic est demandé (POST) : les antivirus des messageries ouvrent les liens
 // automatiquement, ce qui consommerait le jeton avant l'utilisateur.

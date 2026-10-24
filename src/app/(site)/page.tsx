@@ -1,7 +1,9 @@
 import { ArrowRight, KeyRound, ShieldCheck, Store, Tag, Truck } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { FormulaireReservation } from "@/components/FormulaireReservation";
+import { utilisateurCourant } from "@/lib/auth";
 
 const ARGUMENTS = [
   { icone: Tag, titre: "Prix fixe", texte: "Calculé tout de suite, sans surprise" },
@@ -9,8 +11,10 @@ const ARGUMENTS = [
   { icone: KeyRound, titre: "Code de livraison", texte: "Remis seulement à la réception" },
 ];
 
-export default async function Accueil({ searchParams }: { searchParams: Promise<{ annule?: string }> }) {
-  const { annule } = await searchParams;
+export default async function Accueil({ searchParams }: { searchParams: Promise<{ annule?: string; client?: string }> }) {
+  const { annule, client } = await searchParams;
+  // Un transporteur connecté arrive directement dans son app ; « ?client=1 » lui permet de commander quand même.
+  if (!client && (await utilisateurCourant().catch(() => null))?.role === "transporteur") redirect("/transporteur");
   return (
     <>
       <section className="relative isolate overflow-hidden bg-noir pb-32 text-blanc">

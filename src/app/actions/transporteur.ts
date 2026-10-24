@@ -14,6 +14,9 @@ export type Transporteur = {
   id: string;
   statut: "en_attente" | "valide" | "refuse" | "suspendu";
   raison_sociale: string;
+  siret: string;
+  numero_registre_transport: string;
+  assurance_marchandises: string;
   vehicule: "petit" | "moyen" | "grand";
   immatriculation: string;
   stripe_account_id: string | null;
@@ -58,7 +61,7 @@ export async function inscrireTransporteur(_: EtatAction, form: FormData): Promi
   } catch {
     return { erreur: "Inscription impossible (déjà inscrit ?)" };
   }
-  revalidatePath("/transporteur");
+  revalidatePath("/transporteur", "layout");
   return { ok: "Dossier envoyé, nous le validons sous 24 h." };
 }
 
@@ -97,12 +100,14 @@ export async function connecterStripe() {
 export async function accepterCourse(form: FormData) {
   const t = await transporteurValide();
   // Mise à jour conditionnelle : un seul transporteur peut gagner la course.
-  await requete(
+  const gagnee = await une<{ id: string }>(
     `update commandes set statut = 'acceptee', transporteur_id = $2, acceptee_le = now()
-     where id = $1 and statut = 'payee' and transporteur_id is null`,
+     where id = $1 and statut = 'payee' and transporteur_id is null
+     returning id`,
     [String(form.get("id")), t.id],
   );
-  revalidatePath("/transporteur");
+  revalidatePath("/transporteur", "layout");
+  if (gagnee) redirect("/transporteur/en-cours");
 }
 
 export async function marquerEnlevee(form: FormData) {
@@ -112,7 +117,7 @@ export async function marquerEnlevee(form: FormData) {
      where id = $1 and transporteur_id = $2 and statut = 'acceptee'`,
     [String(form.get("id")), t.id],
   );
-  revalidatePath("/transporteur");
+  revalidatePath("/transporteur", "layout");
 }
 
 export async function confirmerLivraison(_: EtatAction, form: FormData): Promise<EtatAction> {
@@ -126,12 +131,32 @@ export async function confirmerLivraison(_: EtatAction, form: FormData): Promise
   if (!livree) return { erreur: "Code de livraison incorrect" };
 
   await verserTransporteur(livree.id);
-  revalidatePath("/transporteur");
+  revalidatePath("/transporteur", "layout");
   return { ok: "Livraison confirmée" };
 }
 
 export async function basculerEnLigne(form: FormData) {
   const t = await transporteurValide();
   await requete("update transporteurs set en_ligne = $2 where id = $1", [t.id, form.get("en_ligne") === "1"]);
-  revalidatePath("/transporteur");
+  revalidatePath("/transporteur", "layout");
+}
+
+const compte = z.object({
+  nom: z.string().trim().min(2, "Nom requis"),
+  telephone: z.string().trim().min(10, "Téléphone requis"),
+  vehicule: z.enum(["petit", "moyen", "grand"]),
+  immatriculation: z.string().trim().min(5, "Immatriculation requise"),
+});
+
+// Profil et véhicule modifiables par le transporteur ; les documents (SIRET, registre, assurance) passent par nous.
+export async function mettreAJourCompte(_: EtatAction, form: FormData): Promise<EtatAction> {
+  const t = await transporteurValide();
+  const p = compte.safeParse(Object.fromEntries(form));
+  if (!p.success) return { erreur: p.error.issues[0]?.message };
+  await transaction(async (c) => {
+    await c.query("update utilisateurs set nom = $2, telephone = $3 where id = $1", [t.id, p.data.nom, p.data.telephone]);
+    await c.query("update transporteurs set vehicule = $2, immatriculation = $3 where id = $1", [t.id, p.data.vehicule, p.data.immatriculation.toUpperCase()]);
+  });
+  revalidatePath("/transporteur", "layout");
+  return { ok: "Modifications enregistrées" };
 }
