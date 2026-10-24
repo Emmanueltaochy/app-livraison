@@ -4,6 +4,7 @@ import { getCommune } from "@/lib/communes";
 import { une } from "@/lib/db";
 import { euros, VEHICULES } from "@/lib/pricing";
 import { dateReunion, ETAPES, heureReunion, STATUTS } from "@/lib/statuts";
+import { SuiviDirect } from "./SuiviDirect";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,7 @@ export default async function Suivi({
     <div className="mx-auto max-w-6xl space-y-5 px-4 py-8 sm:px-6">
       {paye && c.statut === "attente_paiement" && (
         <p className="rounded-bouton bg-alerte-clair p-4 font-bold text-alerte">
-          Paiement en cours de confirmation… actualisez la page dans quelques secondes.
+          Paiement en cours de confirmation… la page se mettra à jour toute seule.
         </p>
       )}
 
@@ -126,6 +127,7 @@ export default async function Suivi({
               </div>
             )
           )}
+          {["attente_paiement", "payee", "acceptee", "enlevee"].includes(c.statut) && <SuiviDirect jeton={jeton} statutInitial={c.statut} />}
         </div>
 
         <div className="space-y-5">
