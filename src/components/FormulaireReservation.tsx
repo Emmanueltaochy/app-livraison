@@ -99,7 +99,7 @@ function ChoixMode(props: { actif: boolean; onClick: () => void; icone: typeof Z
   );
 }
 
-export function FormulaireReservation() {
+export function FormulaireReservation({ client }: { client?: { nom: string; telephone: string; email: string } }) {
   const [etat, envoyer, enCours] = useActionState(creerCommande, {});
   const defaut = useMemo(creneauParDefaut, []);
   const [etape, setEtape] = useState(1);
@@ -346,15 +346,15 @@ export function FormulaireReservation() {
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <label className="etiquette" htmlFor="client_nom">Nom ou société</label>
-              <input id="client_nom" name="client_nom" className="champ" required autoComplete="name" />
+              <input id="client_nom" name="client_nom" className="champ" required autoComplete="name" defaultValue={client?.nom} />
             </div>
             <div>
               <label className="etiquette" htmlFor="client_telephone">Téléphone</label>
-              <input id="client_telephone" name="client_telephone" type="tel" className="champ" required autoComplete="tel" placeholder="0692 12 34 56" />
+              <input id="client_telephone" name="client_telephone" type="tel" className="champ" required autoComplete="tel" placeholder="0692 12 34 56" defaultValue={client?.telephone} />
             </div>
             <div>
               <label className="etiquette" htmlFor="client_email">E-mail</label>
-              <input id="client_email" name="client_email" type="email" className="champ" required autoComplete="email" />
+              <input id="client_email" name="client_email" type="email" className="champ" required autoComplete="email" defaultValue={client?.email} />
             </div>
           </div>
           <p className="text-petit text-gris-500">Votre numéro est transmis uniquement au transporteur qui accepte la course.</p>

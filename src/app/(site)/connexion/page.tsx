@@ -14,7 +14,7 @@ export default async function Connexion({ searchParams }: { searchParams: Promis
           <p className="mt-1 text-gris-500">Recevez un code de connexion par e-mail, sans mot de passe.</p>
         </div>
         {erreur && <p className="rounded-bouton bg-erreur-clair p-3 text-petit font-bold text-erreur">Lien expiré ou déjà utilisé, demandez-en un nouveau.</p>}
-        <FormulaireConnexion retour={retour?.startsWith("/") ? retour : "/transporteur"} />
+        <FormulaireConnexion retour={retour?.startsWith("/") ? retour : "/compte"} />
       </div>
     </div>
   );

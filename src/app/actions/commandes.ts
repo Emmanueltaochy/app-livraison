@@ -5,10 +5,10 @@ import { z } from "zod";
 import { estSurLIle, getCommune, type Point } from "@/lib/communes";
 import { decrire, lireInventaire, resumer } from "@/lib/inventaire";
 import { calculerDevis, personnesMinimum, vehiculeConseille, vehiculeSuffit, VEHICULES } from "@/lib/pricing";
-import { paiementDemo, stripe, stripeConfigure, urlSite } from "@/lib/stripe";
+import { creerSessionPaiement } from "@/lib/paiement";
+import { clePublique, paiementDemo, stripeConfigure } from "@/lib/stripe";
 import { utilisateurCourant } from "@/lib/auth";
 import { requete, une } from "@/lib/db";
-import { MARQUE } from "@/lib/config";
 import { notifierNouvelleCourse } from "@/lib/nouvelleCourse";
 
 const coche = z.preprocess((v) => v === "on" || v === "true", z.boolean());
@@ -168,7 +168,6 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
   }
   if (!commande) return { erreur: "Impossible d'enregistrer la commande, réessayez." };
 
-  const suivi = `${urlSite()}/suivi/${commande.jeton_suivi}`;
 
   if (!stripeConfigure()) {
     if (!paiementDemo()) return { erreur: "Le paiement en ligne n'est pas encore configuré." };
@@ -177,34 +176,20 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
     redirect(`/suivi/${commande.jeton_suivi}?paye=1`);
   }
 
-  const session = await stripe().checkout.sessions.create({
-    mode: "payment",
-    customer_email: f.client_email,
-    locale: "fr",
-    line_items: [
-      {
-        quantity: 1,
-        price_data: {
-          currency: "eur",
-          unit_amount: devis.transportCts,
-          product_data: {
-            name: `Transport ${commande.reference}`,
-            description: devis.lignes.slice(0, -1).map((l) => l.libelle).join(" · "),
-          },
-        },
-      },
-      {
-        quantity: 1,
-        price_data: { currency: "eur", unit_amount: devis.fraisServiceCts, product_data: { name: "Frais de service" } },
-      },
-    ],
-    metadata: { commande_id: commande.id },
-    payment_intent_data: { transfer_group: commande.id, metadata: { commande_id: commande.id } },
-    success_url: `${suivi}?paye=1`,
-    cancel_url: `${urlSite()}/?annule=1`,
-    custom_text: { submit: { message: `Commande ${commande.reference} — ${MARQUE}` } },
-  });
-
-  await requete("update commandes set stripe_session_id = $2 where id = $1", [commande.id, session.id]);
-  redirect(session.url!);
+  // Paiement intégré à la plateforme si la clé publique Stripe est configurée, sinon page Stripe.
+  const integree = Boolean(clePublique());
+  const session = await creerSessionPaiement(
+    {
+      ...commande,
+      client_id: utilisateur?.id ?? null,
+      client_email: f.client_email,
+      commune_depart: f.commune_depart,
+      commune_arrivee: f.commune_arrivee,
+      transport_cts: devis.transportCts,
+      frais_service_cts: devis.fraisServiceCts,
+    },
+    integree,
+    devis.lignes.slice(0, -1).map((l) => l.libelle).join(" · "),
+  );
+  redirect(integree ? `/paiement/${commande.jeton_suivi}` : session.url!);
 }

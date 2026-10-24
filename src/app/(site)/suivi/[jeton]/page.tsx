@@ -1,5 +1,8 @@
 import { ArrowRight, Check, CircleDot, Flag, KeyRound, MapPin, Package, Phone, ShieldCheck, Truck } from "lucide-react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { confirmerPaiement } from "@/lib/paiement";
+import { stripe, stripeConfigure } from "@/lib/stripe";
 import { getCommune } from "@/lib/communes";
 import { une } from "@/lib/db";
 import { euros, VEHICULES } from "@/lib/pricing";
@@ -24,11 +27,18 @@ export default async function Suivi({
   searchParams,
 }: {
   params: Promise<{ jeton: string }>;
-  searchParams: Promise<{ paye?: string }>;
+  searchParams: Promise<{ paye?: string; session_id?: string }>;
 }) {
   const { jeton } = await params;
-  const { paye } = await searchParams;
+  const { paye, session_id } = await searchParams;
   if (!/^[a-f0-9]{32}$/.test(jeton)) notFound();
+
+  // Retour du paiement : on confirme tout de suite, sans attendre le webhook Stripe.
+  if (session_id && stripeConfigure()) {
+    const session = await stripe().checkout.sessions.retrieve(session_id).catch(() => null);
+    const commande = await une<{ id: string }>("select id from commandes where jeton_suivi = $1", [jeton]);
+    if (session && commande && session.metadata?.commande_id === commande.id) await confirmerPaiement(session);
+  }
 
   const c = await une(
     `select c.*, t.raison_sociale, t.immatriculation, u.nom as transporteur_nom, u.telephone as transporteur_telephone
@@ -51,11 +61,15 @@ export default async function Suivi({
 
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 py-8 sm:px-6">
-      {paye && c.statut === "attente_paiement" && (
-        <p className="rounded-bouton bg-alerte-clair p-4 font-bold text-alerte">
-          Paiement en cours de confirmation… la page se mettra à jour toute seule.
-        </p>
-      )}
+      {c.statut === "attente_paiement" &&
+        (paye || session_id ? (
+          <p className="rounded-bouton bg-alerte-clair p-4 font-bold text-alerte">Paiement en cours de confirmation… la page se mettra à jour toute seule.</p>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-bouton bg-alerte-clair p-4">
+            <p className="font-bold text-alerte">Cette commande n&apos;est pas encore payée.</p>
+            <Link href={`/paiement/${jeton}`} className="bouton-noir">Finaliser le paiement</Link>
+          </div>
+        ))}
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>

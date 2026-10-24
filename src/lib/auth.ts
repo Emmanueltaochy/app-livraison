@@ -72,6 +72,8 @@ async function ouvrirSession(email: string): Promise<boolean> {
      returning id`,
     [email],
   );
+  // Les commandes passées sans compte avec cette adresse rejoignent l'espace client.
+  await requete("update commandes set client_id = $1 where client_id is null and lower(client_email) = $2", [u!.id, email]);
   const session = nouveauJeton();
   const expire = new Date(Date.now() + DUREE_SESSION_MS);
   await requete("insert into sessions (empreinte, utilisateur_id, expire_le) values ($1, $2, $3)", [

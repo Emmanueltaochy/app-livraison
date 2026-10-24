@@ -14,7 +14,8 @@ const ARGUMENTS = [
 export default async function Accueil({ searchParams }: { searchParams: Promise<{ annule?: string; client?: string }> }) {
   const { annule, client } = await searchParams;
   // Un transporteur connecté arrive directement dans son app ; « ?client=1 » lui permet de commander quand même.
-  if (!client && (await utilisateurCourant().catch(() => null))?.role === "transporteur") redirect("/transporteur");
+  const u = await utilisateurCourant().catch(() => null);
+  if (!client && u?.role === "transporteur") redirect("/transporteur");
   return (
     <>
       <section className="relative isolate overflow-hidden bg-noir pb-32 text-blanc">
@@ -48,7 +49,7 @@ export default async function Accueil({ searchParams }: { searchParams: Promise<
           </p>
         )}
         <section id="reserver" aria-label="Réserver un transport" className="scroll-mt-24">
-          <FormulaireReservation />
+          <FormulaireReservation client={u ? { nom: u.nom ?? "", telephone: u.telephone ?? "", email: u.email } : undefined} />
         </section>
 
         <section aria-labelledby="comment" className="space-y-6 pt-6">

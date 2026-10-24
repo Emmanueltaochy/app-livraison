@@ -13,7 +13,7 @@ type Etat = { erreur?: string; ok?: string; email?: string };
 export async function envoyerLien(_: Etat, form: FormData): Promise<Etat> {
   const email = z.email().safeParse(String(form.get("email") ?? "").trim());
   if (!email.success) return { erreur: "E-mail invalide" };
-  const retour = cheminSur(String(form.get("retour") ?? ""), "/transporteur");
+  const retour = cheminSur(String(form.get("retour") ?? ""), "/compte");
 
   // Au plus 5 codes par heure et par adresse : empêche de deviner un code à force de redemander.
   const recents = await une<{ n: number }>(

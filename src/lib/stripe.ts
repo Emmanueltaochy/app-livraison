@@ -27,3 +27,7 @@ export function urlSite(): string {
 export function comptePret(compte: Stripe.Account | null | undefined): boolean {
   return Boolean(compte?.capabilities?.transfers === "active" && compte.payouts_enabled);
 }
+
+// Clé publique (pk_…) lue à l'exécution : le paiement s'affiche dans la page (Stripe intégré).
+// Sans elle, on retombe sur la page de paiement hébergée par Stripe.
+export const clePublique = () => process.env.STRIPE_PUBLISHABLE_KEY ?? null;
