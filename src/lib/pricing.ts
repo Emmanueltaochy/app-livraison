@@ -8,25 +8,28 @@ export type VehiculeId = "petit" | "moyen" | "grand";
 
 export const VEHICULES: Record<
   VehiculeId,
-  { nom: string; description: string; baseCts: number; parKmCts: number; minimumCts: number }
+  { nom: string; description: string; charge: string; baseCts: number; parKmCts: number; minimumCts: number }
 > = {
   petit: {
     nom: "Petit utilitaire",
-    description: "3 m³ — cartons, petit meuble, électroménager",
+    description: "Type Kangoo · cartons, petit meuble, électroménager",
+    charge: "500 kg",
     baseCts: 2500,
     parKmCts: 100,
     minimumCts: 3000,
   },
   moyen: {
     nom: "Utilitaire 12 m³",
-    description: "Frigo, canapé, studio, matériaux",
+    description: "Type Master · frigo, canapé, petit déménagement",
+    charge: "1,2 t",
     baseCts: 4500,
     parKmCts: 140,
     minimumCts: 5500,
   },
   grand: {
     nom: "Camion 20 m³ avec hayon",
-    description: "Déménagement T2/T3, palettes, charges lourdes",
+    description: "Hayon élévateur · déménagement, matériaux, palettes",
+    charge: "1,5 t",
     baseCts: 7500,
     parKmCts: 190,
     minimumCts: 9000,
@@ -92,6 +95,15 @@ export function estHeurePointe(date: Date): boolean {
   if (jour === 0 || jour === 6) return false;
   const minutes = reunion.getUTCHours() * 60 + reunion.getUTCMinutes();
   return (minutes >= 390 && minutes < 510) || (minutes >= 930 && minutes < 1110);
+}
+
+// Premier horaire hors bouchons après une heure de pointe (même jour), pour proposer moins cher.
+export function prochainCreneauCreux(date: Date): Date | null {
+  if (!estHeurePointe(date)) return null;
+  const reunion = new Date(date.getTime() + 4 * 3600 * 1000);
+  const minutes = reunion.getUTCHours() * 60 + reunion.getUTCMinutes();
+  const fin = minutes < 510 ? 510 : 1110; // 8h30 ou 18h30
+  return new Date(date.getTime() + (fin - minutes) * 60 * 1000);
 }
 
 const arrondiEuro = (cts: number) => Math.round(cts / 100) * 100;

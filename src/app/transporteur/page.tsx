@@ -1,59 +1,89 @@
+import { ArrowRight, Banknote, Check, Clock, LogOut, Navigation, Package, PackageCheck, Phone, Route, Truck, Users, Zap } from "lucide-react";
 import { accepterCourse, connecterStripe, marquerEnlevee } from "@/app/actions/transporteur";
+import type { Transporteur } from "@/app/actions/transporteur";
 import { deconnexion } from "@/app/connexion/actions";
+import { exigerConnexion } from "@/lib/auth";
 import { getCommune } from "@/lib/communes";
+import { requete, une } from "@/lib/db";
 import { euros, VEHICULES } from "@/lib/pricing";
 import { dateReunion, STATUTS } from "@/lib/statuts";
 import { stripe, stripeConfigure } from "@/lib/stripe";
-import { exigerConnexion } from "@/lib/auth";
-import { requete, une } from "@/lib/db";
-import type { Transporteur } from "@/app/actions/transporteur";
 import { FormulaireInscription } from "./FormulaireInscription";
 import { FormulaireLivraison } from "./FormulaireLivraison";
 
 export const dynamic = "force-dynamic";
 
 const nomCommune = (id: string) => getCommune(id)?.nom ?? id;
+const itineraire = (adresse: string, commune: string) =>
+  `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${adresse}, ${nomCommune(commune)}, La Réunion`)}`;
 
+function Pastille({ icone: Icone, children, accent }: { icone: typeof Route; children: React.ReactNode; accent?: string }) {
+  return (
+    <span className={`pastille ${accent ?? "bg-noir-700 text-blanc"}`}>
+      <Icone className="size-4" /> {children}
+    </span>
+  );
+}
+
+// Espace transporteur : pensé pour le téléphone, fond noir, gros boutons (≥ 56 px).
 export default async function EspaceTransporteur() {
   const u = await exigerConnexion("/transporteur");
   const t = await une<Transporteur>("select * from transporteurs where id = $1", [u.id]);
 
-  const entete = (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-      <h1 className="text-2xl font-bold">Espace transporteur</h1>
-      <form action={deconnexion}>
-        <button className="text-sm text-slate-500 underline">Se déconnecter ({u.email})</button>
-      </form>
+  const cadre = (titre: string, contenu: React.ReactNode, sousTitre?: string) => (
+    <div className="bg-noir text-blanc">
+      <div className="mx-auto max-w-5xl space-y-8 px-4 pt-6 pb-14 sm:px-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            {sousTitre && <p className="text-gris-300">{sousTitre}</p>}
+            <h1 className="titre text-h2 sm:text-h1">{titre}</h1>
+          </div>
+          <form action={deconnexion}>
+            <button className="flex items-center gap-2 text-petit text-gris-300 hover:text-jaune">
+              <LogOut className="size-4" /> Se déconnecter
+            </button>
+          </form>
+        </div>
+        {contenu}
+      </div>
     </div>
   );
 
   if (!t) {
-    return (
-      <div className="mx-auto max-w-2xl">
-        {entete}
-        <div className="carte space-y-4">
-          <h2 className="text-lg font-semibold">Devenir transporteur partenaire</h2>
-          <p className="text-sm text-slate-600">
-            Le transport de marchandises pour le compte d&apos;autrui exige une inscription au registre des
-            transporteurs (DEAL Réunion) et une assurance marchandises. Votre dossier est vérifié avant activation.
-          </p>
+    return cadre(
+      "Devenir transporteur",
+      <div className="space-y-6">
+        <p className="max-w-2xl text-gris-300">
+          Choisissez vos courses, voyez le montant avant d&apos;accepter, soyez payé après chaque livraison. Le transport
+          de marchandises pour autrui exige une inscription au registre des transporteurs (DEAL Réunion) et une
+          assurance marchandises : votre dossier est vérifié avant activation.
+        </p>
+        <div className="rounded-carte bg-blanc p-5 text-noir sm:p-6">
           <FormulaireInscription />
         </div>
-      </div>
+      </div>,
+      u.email,
     );
   }
 
   if (t.statut !== "valide") {
-    const messages: Record<string, string> = {
-      en_attente: "Votre dossier est en cours de vérification. Vous serez prévenu dès sa validation.",
-      refuse: "Votre dossier a été refusé. Contactez-nous pour plus d'informations.",
-      suspendu: "Votre compte est suspendu. Contactez-nous.",
+    const messages: Record<string, [string, string]> = {
+      en_attente: ["Dossier en cours de vérification", "Nous vérifions votre inscription au registre et votre assurance. Vous pourrez accepter des courses dès la validation."],
+      refuse: ["Dossier refusé", "Votre dossier n'a pas pu être validé. Contactez-nous pour plus d'informations."],
+      suspendu: ["Compte suspendu", "Votre compte est suspendu. Contactez-nous."],
     };
-    return (
-      <div className="mx-auto max-w-2xl">
-        {entete}
-        <p className="carte">{messages[t.statut]}</p>
-      </div>
+    const [titre, texte] = messages[t.statut];
+    return cadre(
+      "Espace transporteur",
+      <div className="flex gap-4 rounded-carte bg-noir-800 p-6">
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-pastille bg-jaune text-noir">
+          <Clock className="size-6" />
+        </span>
+        <div>
+          <p className="text-h3 font-extrabold">{titre}</p>
+          <p className="mt-1 text-gris-300">{texte}</p>
+        </div>
+      </div>,
     );
   }
 
@@ -80,89 +110,152 @@ export default async function EspaceTransporteur() {
   const terminees = mesCourses.filter((c) => !["acceptee", "enlevee"].includes(c.statut));
   const gainsCts = terminees.filter((c) => c.statut === "livree").reduce((s, c) => s + c.remuneration_transporteur_cts, 0);
 
-  return (
-    <div className="space-y-8">
-      {entete}
-
+  return cadre(
+    "Courses",
+    <>
       {!stripePret && (
-        <div className="carte border-amber-300 bg-amber-50">
-          <p className="font-semibold">Activez vos virements pour être payé après chaque livraison.</p>
+        <div className="rounded-carte bg-jaune p-5 text-noir">
+          <p className="flex items-center gap-3 text-h4 font-extrabold">
+            <Banknote className="size-7" /> Activez vos virements
+          </p>
+          <p className="mt-1">Renseignez votre IBAN avec Stripe pour être payé après chaque livraison.</p>
           <form action={connecterStripe}>
-            <button className="bouton mt-3">Configurer mes virements (Stripe)</button>
+            <button className="mt-4 flex h-14 w-full items-center justify-center rounded-bouton bg-noir font-extrabold text-blanc">
+              Activer avec Stripe · 2 min
+            </button>
           </form>
         </div>
       )}
 
-      <section>
-        <h2 className="mb-3 text-xl font-bold">Mes courses en cours</h2>
-        {enCours.length === 0 && <p className="text-slate-500">Aucune course en cours.</p>}
-        <div className="grid gap-4 md:grid-cols-2">
-          {enCours.map((c) => (
-            <article key={c.id} className="carte space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold">#{c.reference}</span>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUTS[c.statut].couleur}`}>{STATUTS[c.statut].libelle}</span>
+      {enCours.map((c) => {
+        const charge = c.statut === "enlevee";
+        return (
+          <section key={c.id} aria-label={`Course ${c.reference}`} className="space-y-3">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-gris-300">En cours · {c.reference}</p>
+                <h2 className="titre text-h2">{charge ? "Étape 2 : livraison" : "Étape 1 : chargement"}</h2>
               </div>
-              <p className="text-sm"><strong>Enlèvement</strong> {dateReunion(c.date_enlevement)}<br />{c.adresse_depart}, {nomCommune(c.commune_depart)}{c.etages_depart > 0 && ` (${c.etages_depart}e étage sans ascenseur)`}</p>
-              <p className="text-sm"><strong>Livraison</strong><br />{c.adresse_arrivee}, {nomCommune(c.commune_arrivee)}{c.etages_arrivee > 0 && ` (${c.etages_arrivee}e étage sans ascenseur)`}</p>
-              <p className="text-sm text-slate-600">{c.description}</p>
-              <p className="text-sm">Client : {c.client_nom} — <a className="text-marque underline" href={`tel:${c.client_telephone}`}>{c.client_telephone}</a></p>
-              <p className="font-semibold text-marque">Vous recevez {euros(c.remuneration_transporteur_cts)}</p>
-              <div className="flex flex-wrap gap-2">
-                <a className="bouton-secondaire" target="_blank" href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${c.statut === "acceptee" ? c.adresse_depart : c.adresse_arrivee}, ${nomCommune(c.statut === "acceptee" ? c.commune_depart : c.commune_arrivee)}, La Réunion`)}`}>
-                  Itinéraire
-                </a>
-                {c.statut === "acceptee" && (
-                  <form action={marquerEnlevee}>
-                    <input type="hidden" name="id" value={c.id} />
-                    <button className="bouton">Marchandise chargée</button>
-                  </form>
-                )}
-              </div>
-              {c.statut === "enlevee" && <FormulaireLivraison id={c.id} />}
-            </article>
-          ))}
-        </div>
-      </section>
+              <p className="chiffres large text-h2 font-extrabold text-jaune">{euros(c.remuneration_transporteur_cts)}</p>
+            </div>
+            <div className={`rounded-carte p-5 ${charge ? "bg-noir-800" : "bg-blanc text-noir"}`}>
+              <p className={`text-petit font-extrabold tracking-wider ${charge ? "text-gris-300" : ""}`}>
+                CHARGEMENT · {dateReunion(c.date_enlevement).toUpperCase()}
+              </p>
+              <p className="mt-1 text-h3 font-extrabold">{c.adresse_depart}</p>
+              <p className={charge ? "text-gris-300" : "text-gris-500"}>
+                {nomCommune(c.commune_depart)}
+                {c.etages_depart > 0 && ` · ${c.etages_depart}e étage, sans ascenseur`}
+              </p>
+            </div>
+            <div className={`rounded-carte p-5 ${charge ? "bg-blanc text-noir" : "bg-noir-800"}`}>
+              <p className={`text-petit font-extrabold tracking-wider ${charge ? "" : "text-gris-300"}`}>LIVRAISON · {c.distance_km} KM</p>
+              <p className="mt-1 text-h3 font-extrabold">{c.adresse_arrivee}</p>
+              <p className={charge ? "text-gris-500" : "text-gris-300"}>
+                {nomCommune(c.commune_arrivee)}
+                {c.etages_arrivee > 0 && ` · ${c.etages_arrivee}e étage, sans ascenseur`}
+              </p>
+            </div>
+            <div className="flex gap-3 rounded-carte bg-noir-800 p-5">
+              <Package className="size-6 shrink-0 text-jaune" />
+              <p>
+                {c.description}
+                {c.aide_manutention && <span className="block text-gris-300">Aide à la manutention (2 personnes)</span>}
+              </p>
+            </div>
+            <a href={`tel:${c.client_telephone}`} className="flex h-16 items-center justify-center gap-3 rounded-carte border-2 border-blanc text-h4 font-extrabold">
+              <Phone className="size-6" /> Appeler {c.client_nom.split(" ")[0]} · {c.client_telephone}
+            </a>
+            <div className={`grid gap-3 ${charge ? "" : "grid-cols-[1fr_1.4fr]"}`}>
+              <a
+                href={charge ? itineraire(c.adresse_arrivee, c.commune_arrivee) : itineraire(c.adresse_depart, c.commune_depart)}
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-16 items-center justify-center gap-2 rounded-carte border-2 border-blanc font-extrabold"
+              >
+                <Navigation className="size-5" /> Itinéraire
+              </a>
+              {!charge && (
+                <form action={marquerEnlevee}>
+                  <input type="hidden" name="id" value={c.id} />
+                  <button className="bouton h-16 w-full rounded-carte text-h4">
+                    <PackageCheck className="size-6" /> Marchandise chargée
+                  </button>
+                </form>
+              )}
+            </div>
+            {charge && <FormulaireLivraison id={c.id} commune={nomCommune(c.commune_arrivee)} />}
+          </section>
+        );
+      })}
 
-      <section>
-        <h2 className="mb-3 text-xl font-bold">Courses disponibles</h2>
-        {disponibles.length === 0 && <p className="text-slate-500">Aucune course disponible pour le moment.</p>}
+      <section aria-label="Courses disponibles" className="space-y-4">
+        {enCours.length > 0 && <h2 className="titre text-h3">Courses disponibles</h2>}
+        {disponibles.length === 0 && (
+          <div className="rounded-carte bg-noir-800 p-8 text-center">
+            <Truck className="mx-auto size-10 text-jaune" />
+            <p className="mt-3 text-h4 font-extrabold">Aucune course disponible</p>
+            <p className="text-gris-300">Les nouvelles courses apparaissent ici dès qu&apos;un client a payé.</p>
+          </div>
+        )}
         <div className="grid gap-4 md:grid-cols-2">
           {disponibles.map((c) => (
-            <article key={c.id} className="carte space-y-2">
-              <div className="flex items-start justify-between gap-2">
-                <p className="font-semibold">{nomCommune(c.commune_depart)} → {nomCommune(c.commune_arrivee)}</p>
-                <p className="text-xl font-bold text-marque">{euros(c.remuneration_transporteur_cts)}</p>
+            <article key={c.id} className="space-y-4 rounded-carte border border-noir-700 bg-noir-800 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-h4 font-extrabold">{nomCommune(c.commune_depart)}</p>
+                  <p className="flex items-center gap-1 text-h4 font-extrabold">
+                    <ArrowRight className="size-5" strokeWidth={3} /> {nomCommune(c.commune_arrivee)}
+                  </p>
+                  <p className="mt-1 text-gris-300">{dateReunion(c.date_enlevement)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-petit font-extrabold tracking-wider text-gris-300">VOUS GAGNEZ</p>
+                  <p className="chiffres large text-h2 font-extrabold text-jaune">{euros(c.remuneration_transporteur_cts)}</p>
+                </div>
               </div>
-              <p className="text-sm text-slate-600">{dateReunion(c.date_enlevement)} · {c.distance_km} km · {VEHICULES[c.vehicule as keyof typeof VEHICULES].nom}</p>
-              <p className="text-sm">{c.description}</p>
-              <p className="flex gap-2 text-xs">
-                {c.express && <span className="rounded bg-red-100 px-2 py-0.5 text-red-700">Express</span>}
-                {c.aide_manutention && <span className="rounded bg-slate-100 px-2 py-0.5">2 personnes</span>}
+              <p className="flex flex-wrap gap-2">
+                <Pastille icone={Route}>{c.distance_km} km</Pastille>
+                <Pastille icone={Truck}>{VEHICULES[c.vehicule as keyof typeof VEHICULES].nom}</Pastille>
+                {c.aide_manutention && <Pastille icone={Users} accent="bg-blanc text-noir">2 personnes</Pastille>}
+                {c.express && <Pastille icone={Zap} accent="bg-jaune text-noir">Express</Pastille>}
               </p>
+              <p className="text-petit text-gris-300">{c.description}</p>
               <form action={accepterCourse}>
                 <input type="hidden" name="id" value={c.id} />
-                <button className="bouton w-full" disabled={!stripePret}>Accepter la course</button>
+                <button className="bouton h-16 w-full rounded-carte text-h4" disabled={!stripePret}>
+                  <Check className="size-6" strokeWidth={3} /> Accepter la course
+                </button>
               </form>
             </article>
           ))}
         </div>
       </section>
 
-      <section>
-        <h2 className="mb-3 text-xl font-bold">Historique</h2>
-        <p className="mb-3 text-slate-600">Total gagné : <strong>{euros(gainsCts)}</strong></p>
-        <ul className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white">
+      <section aria-label="Historique" className="space-y-3">
+        <div className="flex items-end justify-between">
+          <h2 className="titre text-h3">Historique</h2>
+          <p className="text-gris-300">
+            Total gagné <span className="chiffres text-h4 font-extrabold text-jaune">{euros(gainsCts)}</span>
+          </p>
+        </div>
+        <ul className="divide-y divide-noir-700 rounded-carte bg-noir-800">
           {terminees.map((c) => (
-            <li key={c.id} className="flex justify-between gap-2 p-3 text-sm">
-              <span>#{c.reference} · {nomCommune(c.commune_depart)} → {nomCommune(c.commune_arrivee)}</span>
-              <span>{STATUTS[c.statut].libelle} · {euros(c.remuneration_transporteur_cts)}</span>
+            <li key={c.id} className="flex items-center justify-between gap-3 p-4">
+              <span>
+                <span className="block font-bold">{nomCommune(c.commune_depart)} → {nomCommune(c.commune_arrivee)}</span>
+                <span className="text-petit text-gris-300">{c.reference} · {dateReunion(c.date_enlevement)}</span>
+              </span>
+              <span className="text-right">
+                <span className="chiffres block font-extrabold">{euros(c.remuneration_transporteur_cts)}</span>
+                <span className={`pastille ${STATUTS[c.statut].couleur}`}>{STATUTS[c.statut].court}</span>
+              </span>
             </li>
           ))}
-          {terminees.length === 0 && <li className="p-3 text-sm text-slate-500">Aucune course terminée.</li>}
+          {terminees.length === 0 && <li className="p-4 text-gris-300">Aucune course terminée pour l&apos;instant.</li>}
         </ul>
       </section>
-    </div>
+    </>,
+    u.email,
   );
 }

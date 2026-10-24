@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculerDevis, distanceRouteKm, estHeurePointe } from "./pricing";
+import { calculerDevis, distanceRouteKm, estHeurePointe, prochainCreneauCreux } from "./pricing";
 
 describe("distanceRouteKm", () => {
   it("Saint-Denis → Saint-Pierre ≈ 70 km par la route", () => {
@@ -61,5 +61,13 @@ describe("calculerDevis", () => {
     const pointe = calculerDevis({ ...base, dateEnlevement: new Date("2026-10-20T03:30:00Z") });
     expect(pointe.heurePointe).toBe(true);
     expect(pointe.totalCts).toBeGreaterThan(creuse.totalCts);
+  });
+});
+
+describe("prochainCreneauCreux", () => {
+  it("matin 7h30 → 8h30, soir 16h → 18h30, hors pointe → null", () => {
+    expect(prochainCreneauCreux(new Date("2026-10-20T03:30:00Z"))?.toISOString()).toBe("2026-10-20T04:30:00.000Z");
+    expect(prochainCreneauCreux(new Date("2026-10-20T12:00:00Z"))?.toISOString()).toBe("2026-10-20T14:30:00.000Z");
+    expect(prochainCreneauCreux(new Date("2026-10-20T07:00:00Z"))).toBeNull();
   });
 });

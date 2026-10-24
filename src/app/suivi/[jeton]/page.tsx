@@ -1,10 +1,21 @@
+import { ArrowRight, Check, CircleDot, Flag, KeyRound, MapPin, Package, Phone, ShieldCheck, Truck } from "lucide-react";
 import { notFound } from "next/navigation";
 import { getCommune } from "@/lib/communes";
-import { euros } from "@/lib/pricing";
-import { dateReunion, ETAPES, STATUTS } from "@/lib/statuts";
 import { une } from "@/lib/db";
+import { euros, VEHICULES } from "@/lib/pricing";
+import { dateReunion, ETAPES, heureReunion, STATUTS } from "@/lib/statuts";
 
 export const dynamic = "force-dynamic";
+
+const ICONES_ETAPES = [Truck, Truck, Package, Flag];
+
+const initiales = (nom: string) =>
+  nom
+    .split(/\s+/)
+    .map((m) => m[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
 // Page de suivi publique : accessible uniquement via le jeton secret envoyé au client.
 export default async function Suivi({
@@ -33,51 +44,118 @@ export default async function Suivi({
     : null;
   const statut = STATUTS[c.statut];
   const indexEtape = ETAPES.indexOf(c.statut);
+  const horodatages = [c.payee_le, c.acceptee_le, c.enlevee_le, c.livree_le];
+  const depart = getCommune(c.commune_depart)?.nom;
+  const arrivee = getCommune(c.commune_arrivee)?.nom;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="mx-auto max-w-6xl space-y-5 px-4 py-8 sm:px-6">
       {paye && c.statut === "attente_paiement" && (
-        <p className="rounded-lg bg-amber-50 p-3 text-amber-800">
+        <p className="rounded-bouton bg-alerte-clair p-4 font-bold text-alerte">
           Paiement en cours de confirmation… actualisez la page dans quelques secondes.
         </p>
       )}
-      <div className="carte space-y-2">
-        <p className="text-sm text-slate-500">Commande {c.reference}</p>
-        <span className={`inline-block rounded-full px-3 py-1 text-sm font-semibold ${statut.couleur}`}>{statut.libelle}</span>
-        <ol className="mt-4 grid grid-cols-4 gap-1 text-center text-xs">
-          {ETAPES.map((e, i) => (
-            <li key={e} className={`rounded-md py-2 ${i <= indexEtape ? "bg-marque text-white" : "bg-slate-100 text-slate-500"}`}>
-              {STATUTS[e].libelle}
-            </li>
-          ))}
-        </ol>
+
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-petit text-gris-500">Commande {c.reference} · {dateReunion(c.date_enlevement)}</p>
+          <h1 className="titre mt-1 flex flex-wrap items-center gap-x-3 text-h2 sm:text-h1">
+            {depart} <ArrowRight className="size-8 sm:size-10" strokeWidth={3} /> {arrivee}
+          </h1>
+        </div>
+        <span className={`pastille ${statut.couleur}`}>{statut.libelle}</span>
       </div>
 
-      {["acceptee", "enlevee"].includes(c.statut) && (
-        <div className="carte border-marque bg-teal-50 text-center">
-          <p className="text-sm text-slate-700">Code de livraison à donner au transporteur <strong>uniquement à la réception</strong> :</p>
-          <p className="mt-1 text-4xl font-bold tracking-[0.3em] text-marque">{c.code_livraison}</p>
-        </div>
+      {c.statut !== "annulee" && c.statut !== "attente_paiement" && (
+        <ol className="carte grid gap-5 sm:grid-cols-4">
+          {ETAPES.map((e, i) => {
+            const fait = i < indexEtape || c.statut === "livree";
+            const actuel = i === indexEtape && c.statut !== "livree";
+            const Icone = ICONES_ETAPES[i];
+            return (
+              <li key={e} className="flex gap-3 sm:block">
+                <span
+                  className={`flex size-9 shrink-0 items-center justify-center rounded-pastille ${
+                    fait ? "bg-noir text-jaune" : actuel ? "bg-jaune text-noir shadow-[0_0_0_5px_var(--color-jaune-clair)]" : "border-2 border-gris-300 text-gris-500"
+                  }`}
+                >
+                  {fait ? <Check className="size-4" strokeWidth={3} /> : <Icone className="size-4" />}
+                </span>
+                <span className="sm:mt-3 sm:block">
+                  <span className={`block font-bold ${fait || actuel ? "" : "text-gris-500"}`}>{STATUTS[e].libelle}</span>
+                  {horodatages[i] && <span className="chiffres block text-petit text-gris-500">{heureReunion(horodatages[i])}</span>}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
       )}
 
-      {t && (
-        <div className="carte">
-          <h2 className="font-semibold">Votre transporteur</h2>
-          <p>{t.nom ?? t.raison_sociale} — {t.raison_sociale}</p>
-          <p className="text-sm text-slate-600">Véhicule immatriculé {t.immatriculation}</p>
-          {t.telephone && (
-            <a href={`tel:${t.telephone}`} className="bouton mt-3">Appeler {t.telephone}</a>
+      <div className="grid items-start gap-5 lg:grid-cols-[1fr_380px]">
+        <div className="space-y-5">
+          {t ? (
+            <div className="carte flex flex-wrap items-center gap-4">
+              <span className="flex size-14 items-center justify-center rounded-pastille bg-noir text-h4 font-extrabold text-jaune">
+                {initiales(t.nom ?? t.raison_sociale)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-2 text-h4 font-extrabold">
+                  {t.nom ?? t.raison_sociale}
+                  <span className="pastille bg-gris-100 text-gris-700"><ShieldCheck className="size-3.5" /> Vérifié</span>
+                </p>
+                <p className="text-petit text-gris-500">{t.raison_sociale} · {VEHICULES[c.vehicule as keyof typeof VEHICULES].nom}</p>
+              </div>
+              <span className="chiffres rounded-champ border-2 border-noir px-3 py-1.5 font-extrabold tracking-widest">{t.immatriculation}</span>
+              {t.telephone && (
+                <a href={`tel:${t.telephone}`} className="bouton-noir">
+                  <Phone className="size-4" /> Appeler
+                </a>
+              )}
+            </div>
+          ) : (
+            c.statut === "payee" && (
+              <div className="carte flex items-center gap-4">
+                <span className="flex size-12 items-center justify-center rounded-pastille bg-alerte-clair text-alerte">
+                  <Truck className="size-6" />
+                </span>
+                <p>
+                  <strong>Nous recherchons votre transporteur.</strong>
+                  <br />
+                  <span className="text-gris-500">Vous verrez ici son nom et son numéro dès qu&apos;il accepte la course.</span>
+                </p>
+              </div>
+            )
           )}
         </div>
-      )}
 
-      <div className="carte space-y-1 text-sm">
-        <p><strong>Enlèvement :</strong> {c.adresse_depart}, {getCommune(c.commune_depart)?.nom} — {dateReunion(c.date_enlevement)}</p>
-        <p><strong>Livraison :</strong> {c.adresse_arrivee}, {getCommune(c.commune_arrivee)?.nom}</p>
-        <p><strong>Marchandise :</strong> {c.description}</p>
-        <p><strong>Total payé :</strong> {euros(c.total_cts)}</p>
+        <div className="space-y-5">
+          {["acceptee", "enlevee"].includes(c.statut) && (
+            <div className="rounded-carte bg-jaune p-6 text-noir">
+              <p className="flex items-center gap-2 font-extrabold">
+                <KeyRound className="size-5" /> Code de livraison
+              </p>
+              <p className="chiffres large mt-2 text-[4.5rem] leading-none font-extrabold tracking-[0.25em]">{c.code_livraison}</p>
+              <p className="mt-3 text-petit">
+                Donnez ce code au transporteur <strong>uniquement</strong> quand vous avez vérifié la marchandise. Il confirme la livraison.
+              </p>
+            </div>
+          )}
+
+          <div className="carte space-y-3">
+            <h2 className="text-h4 font-extrabold">Récapitulatif</h2>
+            <ul className="space-y-2 text-petit">
+              <li className="flex gap-2"><CircleDot className="size-4 shrink-0" /> {c.adresse_depart}, {depart}</li>
+              <li className="flex gap-2"><MapPin className="size-4 shrink-0" /> {c.adresse_arrivee}, {arrivee}</li>
+              <li className="flex gap-2"><Package className="size-4 shrink-0" /> {c.description}</li>
+            </ul>
+            <div className="flex items-end justify-between border-t-2 border-dashed border-gris-300 pt-3">
+              <span className="font-bold">Payé TTC</span>
+              <span className="chiffres large text-h2 font-extrabold">{euros(c.total_cts)}</span>
+            </div>
+          </div>
+          <p className="text-center text-petit text-gris-500">Gardez ce lien : il vous permet de suivre votre commande.</p>
+        </div>
       </div>
-      <p className="text-center text-xs text-slate-500">Gardez ce lien : il vous permet de suivre votre commande.</p>
     </div>
   );
 }

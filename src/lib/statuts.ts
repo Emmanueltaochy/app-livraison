@@ -1,10 +1,12 @@
-export const STATUTS: Record<string, { libelle: string; couleur: string }> = {
-  attente_paiement: { libelle: "En attente de paiement", couleur: "bg-slate-100 text-slate-700" },
-  payee: { libelle: "Recherche d'un transporteur", couleur: "bg-amber-100 text-amber-800" },
-  acceptee: { libelle: "Transporteur en route", couleur: "bg-blue-100 text-blue-800" },
-  enlevee: { libelle: "Marchandise chargée", couleur: "bg-indigo-100 text-indigo-800" },
-  livree: { libelle: "Livrée", couleur: "bg-green-100 text-green-800" },
-  annulee: { libelle: "Annulée", couleur: "bg-red-100 text-red-700" },
+// Couleurs des statuts selon la charte : Recherche = alerte · En route = info ·
+// Chargée = jaune-clair/noir · Livrée = succès · Annulée = erreur.
+export const STATUTS: Record<string, { libelle: string; court: string; couleur: string }> = {
+  attente_paiement: { libelle: "En attente de paiement", court: "Paiement", couleur: "bg-gris-100 text-gris-700" },
+  payee: { libelle: "Recherche d'un transporteur", court: "Recherche", couleur: "bg-alerte-clair text-alerte" },
+  acceptee: { libelle: "Transporteur en route", court: "En route", couleur: "bg-info-clair text-info" },
+  enlevee: { libelle: "Marchandise chargée", court: "Chargée", couleur: "bg-jaune-clair text-noir" },
+  livree: { libelle: "Livrée", court: "Livrée", couleur: "bg-succes-clair text-succes" },
+  annulee: { libelle: "Annulée", court: "Annulée", couleur: "bg-erreur-clair text-erreur" },
 };
 
 export const ETAPES = ["payee", "acceptee", "enlevee", "livree"] as const;
@@ -18,4 +20,8 @@ export function dateReunion(iso: string | Date): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+export function heureReunion(iso: string | Date): string {
+  return new Date(iso).toLocaleTimeString("fr-FR", { timeZone: "Indian/Reunion", hour: "2-digit", minute: "2-digit" });
 }

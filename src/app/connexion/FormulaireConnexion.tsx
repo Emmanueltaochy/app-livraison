@@ -1,17 +1,26 @@
 "use client";
 
+import { MailCheck } from "lucide-react";
 import { useActionState } from "react";
 import { envoyerLien } from "./actions";
 
 export function FormulaireConnexion({ retour }: { retour: string }) {
   const [etat, action, enCours] = useActionState(envoyerLien, {});
-  if (etat.ok) return <p className="rounded-lg bg-green-50 p-3 text-green-800">{etat.ok}</p>;
+  if (etat.ok)
+    return (
+      <div className="flex gap-3 rounded-bouton bg-succes-clair p-4 text-succes">
+        <MailCheck className="size-6 shrink-0" />
+        <p className="font-bold">{etat.ok}</p>
+      </div>
+    );
   return (
-    <form action={action} className="space-y-3">
+    <form action={action} className="space-y-4">
       <input type="hidden" name="retour" value={retour} />
-      <label className="etiquette" htmlFor="email">E-mail</label>
-      <input id="email" name="email" type="email" required className="champ" autoComplete="email" />
-      {etat.erreur && <p className="text-sm text-red-700">{etat.erreur}</p>}
+      <div>
+        <label className="etiquette" htmlFor="email">E-mail</label>
+        <input id="email" name="email" type="email" required className="champ" autoComplete="email" />
+      </div>
+      {etat.erreur && <p className="text-petit font-bold text-erreur">{etat.erreur}</p>}
       <button className="bouton w-full" disabled={enCours}>{enCours ? "Envoi…" : "Recevoir mon lien"}</button>
     </form>
   );

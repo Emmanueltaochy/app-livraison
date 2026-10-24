@@ -1,47 +1,71 @@
+import { ArrowRight, KeyRound, ShieldCheck, Store, Tag, Truck } from "lucide-react";
+import Link from "next/link";
 import { FormulaireReservation } from "@/components/FormulaireReservation";
-import { MARQUE, SLOGAN } from "@/lib/config";
+
+const ARGUMENTS = [
+  { icone: Tag, titre: "Prix fixe", texte: "Calculé tout de suite, sans surprise" },
+  { icone: ShieldCheck, titre: "Transporteurs vérifiés", texte: "Inscrits au registre et assurés" },
+  { icone: KeyRound, titre: "Code de livraison", texte: "Remis seulement à la réception" },
+];
 
 export default async function Accueil({ searchParams }: { searchParams: Promise<{ annule?: string }> }) {
   const { annule } = await searchParams;
   return (
-    <div className="space-y-10">
-      <section className="rounded-3xl bg-gradient-to-br from-marque to-marque-fonce px-6 py-10 text-white sm:px-10">
-        <h1 className="max-w-2xl text-3xl font-bold leading-tight sm:text-4xl">{SLOGAN}</h1>
-        <p className="mt-3 max-w-xl text-teal-50">
-          Un achat sur Leboncoin, une livraison de magasin, un petit déménagement : choisissez votre trajet, obtenez
-          un prix fixe immédiatement, un transporteur vérifié s&apos;occupe du reste.
-        </p>
-        <ul className="mt-6 grid gap-3 text-sm sm:grid-cols-3">
-          <li className="rounded-xl bg-white/10 p-3">✅ Prix fixe, sans négociation</li>
-          <li className="rounded-xl bg-white/10 p-3">🚚 Transporteurs pros inscrits et assurés</li>
-          <li className="rounded-xl bg-white/10 p-3">🔒 Code de livraison : vous payez, il livre</li>
-        </ul>
-      </section>
-
-      {annule && (
-        <p className="rounded-lg bg-amber-50 p-3 text-amber-800">Paiement annulé : votre commande n&apos;a pas été validée.</p>
-      )}
-
-      <section id="reserver" className="scroll-mt-20">
-        <h2 className="mb-4 text-2xl font-bold">Réserver un transport</h2>
-        <FormulaireReservation />
-      </section>
-
-      <section className="carte grid gap-4 sm:grid-cols-2">
-        <div>
-          <h2 className="text-xl font-bold">Vous êtes un magasin ou une entreprise ?</h2>
-          <p className="mt-1 text-slate-600">
-            Réservez vos livraisons clients depuis votre ordinateur. Volume régulier ? Contactez-nous pour un tarif pro.
-          </p>
-        </div>
-        <div>
-          <h2 className="text-xl font-bold">Vous avez un utilitaire ?</h2>
-          <p className="mt-1 text-slate-600">
-            Rejoignez {MARQUE} et recevez des courses près de chez vous. Paiement garanti après chaque livraison.
-          </p>
-          <a href="/transporteur" className="bouton mt-3">Devenir transporteur</a>
+    <>
+      <section className="bg-noir pb-32 text-blanc">
+        <div className="mx-auto max-w-6xl px-4 pt-8 sm:px-6 sm:pt-14">
+          <h1 className="titre max-w-3xl text-[2.25rem] leading-[1.05] sm:text-h1 lg:text-[4rem]">
+            Vos marchandises livrées partout sur l&apos;île, au prix annoncé.
+          </h1>
+          <ul className="mt-8 grid gap-4 sm:grid-cols-3">
+            {ARGUMENTS.map(({ icone: Icone, titre, texte }) => (
+              <li key={titre} className="flex items-center gap-3">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-bouton bg-jaune text-noir">
+                  <Icone className="size-5" />
+                </span>
+                <span>
+                  <span className="block font-extrabold">{titre}</span>
+                  <span className="block text-petit text-gris-300">{texte}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
-    </div>
+
+      <div className="mx-auto -mt-24 max-w-6xl space-y-10 px-4 sm:px-6">
+        {annule && (
+          <p className="rounded-bouton bg-alerte-clair p-4 font-bold text-alerte">
+            Paiement annulé : votre commande n&apos;a pas été validée.
+          </p>
+        )}
+        <section id="reserver" aria-label="Réserver un transport" className="scroll-mt-4">
+          <FormulaireReservation />
+        </section>
+
+        <section id="pro" className="grid scroll-mt-4 gap-5 md:grid-cols-2">
+          <div className="rounded-panneau bg-jaune p-8 text-noir">
+            <Store className="size-8" />
+            <h2 className="titre mt-4 text-h2">Vous êtes un magasin ?</h2>
+            <p className="mt-2 max-w-md">
+              Livrez vos clients le jour même. Réservez en quelques secondes depuis l&apos;ordinateur de la caisse.
+            </p>
+            <a href="#reserver" className="bouton-noir mt-6">
+              Réserver une livraison <ArrowRight className="size-4" />
+            </a>
+          </div>
+          <div className="rounded-panneau bg-noir p-8 text-blanc">
+            <Truck className="size-8 text-jaune" />
+            <h2 className="titre mt-4 text-h2">Vous avez un utilitaire ?</h2>
+            <p className="mt-2 max-w-md text-gris-300">
+              Devenez transporteur. Choisissez vos courses, voyez le montant avant d&apos;accepter, soyez payé après chaque livraison.
+            </p>
+            <Link href="/transporteur" className="bouton mt-6 h-12">
+              Devenir transporteur <ArrowRight className="size-4" />
+            </Link>
+          </div>
+        </section>
+      </div>
+    </>
   );
 }

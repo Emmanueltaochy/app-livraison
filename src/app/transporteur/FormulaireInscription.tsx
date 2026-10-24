@@ -16,7 +16,7 @@ const CHAMPS = [
 
 export function FormulaireInscription() {
   const [etat, action, enCours] = useActionState(inscrireTransporteur, {});
-  if (etat.ok) return <p className="rounded-lg bg-green-50 p-3 text-green-800">{etat.ok}</p>;
+  if (etat.ok) return <p className="rounded-bouton bg-succes-clair p-4 font-bold text-succes">{etat.ok}</p>;
   return (
     <form action={action} className="grid gap-4 sm:grid-cols-2">
       {CHAMPS.map(({ label, ...c }) => (
@@ -31,7 +31,7 @@ export function FormulaireInscription() {
           {Object.entries(VEHICULES).map(([id, v]) => <option key={id} value={id}>{v.nom}</option>)}
         </select>
       </div>
-      {etat.erreur && <p className="text-sm text-red-700 sm:col-span-2">{etat.erreur}</p>}
+      {etat.erreur && <p className="rounded-bouton bg-erreur-clair p-3 text-petit font-bold text-erreur sm:col-span-2">{etat.erreur}</p>}
       <button className="bouton sm:col-span-2" disabled={enCours}>{enCours ? "Envoi…" : "Envoyer mon dossier"}</button>
     </form>
   );

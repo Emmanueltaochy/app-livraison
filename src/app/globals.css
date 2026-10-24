@@ -1,33 +1,124 @@
+/* Design tokens FretPéi (handoff Claude Design) — Tailwind CSS v4 */
 @import "tailwindcss";
 
 @theme {
-  --color-marque: #0f766e;
-  --color-marque-fonce: #115e59;
-  --color-accent: #f59e0b;
-  --font-sans: var(--font-geist-sans);
+  /* Marque */
+  --color-noir: #121212;
+  --color-noir-800: #1e1e1e;
+  --color-noir-700: #2a2a2a;
+  --color-jaune: #ffc800;
+  --color-jaune-survol: #f2b600;
+  --color-jaune-clair: #fff1b8;
+  --color-jaune-fonce: #c79100; /* bordures / icônes uniquement, jamais texte sur blanc */
+  --color-blanc: #ffffff;
+  --color-fond: #f7f6f2;
+
+  /* Neutres */
+  --color-gris-100: #edebe6;
+  --color-gris-300: #c9c6be;
+  --color-gris-500: #66635c;
+  --color-gris-700: #3a3834;
+
+  /* États (texte foncé sur fond clair associé) */
+  --color-succes: #167a43;
+  --color-succes-clair: #e3f4ea;
+  --color-alerte: #b23a0a;
+  --color-alerte-clair: #fdebdd;
+  --color-erreur: #c81e1e;
+  --color-erreur-clair: #fde4e4;
+  --color-info: #1d5fc4;
+  --color-info-clair: #e2ecfb;
+
+  /* Typographie */
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --text-h1: 3rem;
+  --text-h1--line-height: 1.05;
+  --text-h2: 2rem;
+  --text-h2--line-height: 1.1;
+  --text-h3: 1.375rem;
+  --text-h3--line-height: 1.2;
+  --text-h4: 1.125rem;
+  --text-h4--line-height: 1.3;
+  --text-corps: 1rem;
+  --text-corps--line-height: 1.5;
+  --text-petit: 0.8125rem;
+  --text-petit--line-height: 1.4;
+  --text-prix: 2.75rem;
+  --text-prix--line-height: 1;
+  --text-code: 3.5rem;
+  --text-code--line-height: 1;
+
+  /* Rayons */
+  --radius-champ: 10px;
+  --radius-bouton: 12px;
+  --radius-carte: 16px;
+  --radius-panneau: 24px;
+  --radius-pastille: 999px;
+
+  /* Ombres */
+  --shadow-carte: 0 1px 2px rgb(18 18 18 / 0.06), 0 4px 16px rgb(18 18 18 / 0.06);
+  --shadow-flottante: 0 12px 32px rgb(18 18 18 / 0.18);
+  --shadow-focus: 0 0 0 3px #ffc800, 0 0 0 5px #121212;
+}
+
+/* Chiffres alignés pour prix, codes, tableaux */
+@utility chiffres {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+/* Archivo élargi pour titres et prix */
+@utility large {
+  font-stretch: 115%;
 }
 
 body {
-  background: #f8fafc;
-  color: #0f172a;
+  background: var(--color-fond);
+  color: var(--color-noir);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.titre {
+  @apply large font-extrabold tracking-tight;
 }
 
 .champ {
-  @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base outline-none focus:border-marque focus:ring-2 focus:ring-marque/20;
+  @apply h-12 w-full rounded-champ border border-gris-300 bg-blanc px-3.5 text-corps text-noir outline-none placeholder:text-gris-500 focus:border-noir focus:shadow-focus;
+}
+textarea.champ {
+  @apply h-auto py-3;
 }
 
 .etiquette {
-  @apply mb-1 block text-sm font-medium text-slate-700;
+  @apply mb-1.5 block text-petit font-bold text-noir;
 }
 
 .bouton {
-  @apply inline-flex items-center justify-center rounded-lg bg-marque px-4 py-2.5 font-semibold text-white transition hover:bg-marque-fonce disabled:opacity-50;
+  @apply inline-flex h-14 items-center justify-center gap-2 rounded-bouton bg-jaune px-5 font-extrabold text-noir transition hover:bg-jaune-survol disabled:cursor-not-allowed disabled:bg-gris-100 disabled:text-gris-500;
+}
+
+.bouton-noir {
+  @apply inline-flex h-12 items-center justify-center gap-2 rounded-bouton bg-noir px-5 font-bold text-blanc transition hover:bg-noir-700;
 }
 
 .bouton-secondaire {
-  @apply inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 font-medium text-slate-800 transition hover:bg-slate-50;
+  @apply inline-flex h-12 items-center justify-center gap-2 rounded-bouton border-2 border-noir bg-blanc px-5 font-bold text-noir transition hover:bg-gris-100;
+}
+
+.bouton-danger {
+  @apply inline-flex h-12 items-center justify-center gap-2 rounded-bouton border-2 border-erreur bg-blanc px-5 font-bold text-erreur transition hover:bg-erreur-clair;
 }
 
 .carte {
-  @apply rounded-2xl border border-slate-200 bg-white p-5 shadow-sm;
+  @apply rounded-carte bg-blanc p-5 shadow-carte sm:p-6;
+}
+
+.pastille {
+  @apply inline-flex items-center gap-1.5 rounded-pastille px-2.5 py-1 text-petit font-bold;
+}
+
+.numero-etape {
+  @apply inline-flex size-7 items-center justify-center rounded-pastille bg-noir text-petit font-extrabold text-jaune;
 }

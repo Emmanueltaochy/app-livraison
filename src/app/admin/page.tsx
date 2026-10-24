@@ -1,122 +1,189 @@
+import { AlertTriangle, Percent, Route, Wallet } from "lucide-react";
+import Link from "next/link";
 import { annulerCommande, changerStatutTransporteur, relancerVirement } from "@/app/actions/admin";
-import { getCommune } from "@/lib/communes";
-import { euros, VEHICULES } from "@/lib/pricing";
-import { dateReunion, STATUTS } from "@/lib/statuts";
 import { exigerAdmin } from "@/lib/auth";
+import { getCommune } from "@/lib/communes";
 import { requete } from "@/lib/db";
+import { euros, VEHICULES } from "@/lib/pricing";
+import { STATUTS } from "@/lib/statuts";
 
 export const dynamic = "force-dynamic";
 
 const nomCommune = (id: string) => getCommune(id)?.nom ?? id;
+const FILTRES = [
+  { id: "", libelle: "Toutes" },
+  { id: "payee", libelle: "Recherche" },
+  { id: "acceptee", libelle: "En route" },
+  { id: "enlevee", libelle: "Chargée" },
+  { id: "livree", libelle: "Livrée" },
+];
+const initiales = (nom: string) =>
+  nom
+    .split(/\s+/)
+    .map((m) => m[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+const dateCourte = (d: Date) =>
+  new Date(d).toLocaleString("fr-FR", { timeZone: "Indian/Reunion", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
-export default async function Admin() {
+export default async function Admin({ searchParams }: { searchParams: Promise<{ statut?: string }> }) {
   await exigerAdmin();
-  const [commandes, transporteurs, mois] = await Promise.all([
-    requete("select * from commandes order by cree_le desc limit 100"),
+  const { statut } = await searchParams;
+  const filtre = FILTRES.some((f) => f.id === statut) ? statut : "";
+
+  const [commandes, aValider, [mois]] = await Promise.all([
+    requete(
+      `select c.*, u.nom as transporteur_nom from commandes c left join utilisateurs u on u.id = c.transporteur_id
+       where ($1 = '' or c.statut::text = $1)
+       order by c.cree_le desc limit 100`,
+      [filtre],
+    ),
     requete(
       `select t.*, u.nom, u.telephone, u.email from transporteurs t join utilisateurs u on u.id = t.id
-       order by t.cree_le desc`,
+       where t.statut = 'en_attente' order by t.cree_le`,
     ),
     // Mois calendaire en heure de La Réunion.
     requete(
-      `select total_cts, commission_cts, frais_service_cts from commandes
+      `select coalesce(sum(total_cts), 0)::int as volume, coalesce(sum(commission_cts + frais_service_cts), 0)::int as marge,
+              count(*)::int as courses,
+              (select count(*)::int from commandes where statut = 'payee') as sans_transporteur
+       from commandes
        where statut <> 'annulee'
          and payee_le >= date_trunc('month', now() at time zone 'Indian/Reunion') at time zone 'Indian/Reunion'`,
     ),
   ]);
 
-  const volumeCts = mois.reduce((s, c) => s + c.total_cts, 0);
-  const margeCts = mois.reduce((s, c) => s + c.commission_cts + c.frais_service_cts, 0);
-  const aValider = transporteurs.filter((t) => t.statut === "en_attente");
-  const enAttente = commandes.filter((c) => c.statut === "payee");
-
-  const indicateurs = [
-    { libelle: "Volume payé ce mois", valeur: euros(volumeCts) },
-    { libelle: "Marge plateforme ce mois", valeur: euros(margeCts) },
-    { libelle: "Courses ce mois", valeur: String(mois.length) },
-    { libelle: "Sans transporteur", valeur: String(enAttente.length) },
-  ];
+  const nomMois = new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", month: "long" });
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-2xl font-bold">Administration</h1>
+    <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6">
+      <div>
+        <p className="text-petit text-gris-500">
+          {new Date().toLocaleDateString("fr-FR", { timeZone: "Indian/Reunion", weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+        </p>
+        <h1 className="titre text-h2 sm:text-h1">Tableau de bord</h1>
+      </div>
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {indicateurs.map((i) => (
-          <div key={i.libelle} className="carte">
-            <p className="text-sm text-slate-500">{i.libelle}</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums">{i.valeur}</p>
-          </div>
-        ))}
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="rounded-carte bg-noir p-5 text-blanc">
+          <p className="flex items-center gap-2 text-petit font-bold"><Wallet className="size-4" /> Volume payé · {nomMois}</p>
+          <p className="chiffres large mt-2 text-h2 font-extrabold">{euros(mois.volume)}</p>
+        </div>
+        <div className="carte">
+          <p className="flex items-center gap-2 text-petit font-bold"><Percent className="size-4" /> Marge plateforme</p>
+          <p className="chiffres large mt-2 text-h2 font-extrabold">{euros(mois.marge)}</p>
+          {mois.volume > 0 && <p className="text-petit font-bold text-succes">{Math.round((mois.marge / mois.volume) * 100)} % du volume</p>}
+        </div>
+        <div className="carte">
+          <p className="flex items-center gap-2 text-petit font-bold"><Route className="size-4" /> Courses</p>
+          <p className="chiffres large mt-2 text-h2 font-extrabold">{mois.courses}</p>
+        </div>
+        <div className={`rounded-carte p-5 ${mois.sans_transporteur > 0 ? "bg-alerte-clair" : "bg-blanc shadow-carte"}`}>
+          <p className="flex items-center gap-2 text-petit font-bold"><AlertTriangle className="size-4" /> Sans transporteur</p>
+          <p className="chiffres large mt-2 text-h2 font-extrabold">{mois.sans_transporteur}</p>
+        </div>
       </section>
 
-      <section>
-        <h2 className="mb-3 text-xl font-bold">Transporteurs à valider ({aValider.length})</h2>
-        <div className="grid gap-3 md:grid-cols-2">
+      <section className="space-y-3">
+        <h2 className="flex items-center gap-2 text-h3 font-extrabold">
+          Dossiers transporteurs à valider
+          <span className="pastille bg-jaune text-noir">{aValider.length}</span>
+        </h2>
+        {aValider.length === 0 && <p className="text-gris-500">Aucun dossier en attente.</p>}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {aValider.map((t) => (
-            <article key={t.id} className="carte space-y-1 text-sm">
-              <p className="font-semibold">{t.nom} — {t.raison_sociale}</p>
-              <p>📞 {t.telephone} · {t.email}</p>
-              <p>SIRET {t.siret} · Registre {t.numero_registre_transport}</p>
-              <p>Assurance : {t.assurance_marchandises}</p>
-              <p>{VEHICULES[t.vehicule as keyof typeof VEHICULES].nom} · {t.immatriculation}</p>
-              <div className="flex gap-2 pt-2">
-                {(["valide", "refuse"] as const).map((statut) => (
-                  <form key={statut} action={changerStatutTransporteur}>
+            <article key={t.id} className="carte space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="flex size-11 items-center justify-center rounded-pastille bg-noir font-extrabold text-jaune">{initiales(t.nom ?? t.raison_sociale)}</span>
+                <div>
+                  <p className="font-extrabold">{t.nom}</p>
+                  <p className="text-petit text-gris-500">{t.raison_sociale}</p>
+                </div>
+              </div>
+              <dl className="space-y-1 text-petit">
+                {[
+                  ["Véhicule", `${VEHICULES[t.vehicule as keyof typeof VEHICULES].nom} · ${t.immatriculation}`],
+                  ["SIRET", t.siret],
+                  ["Registre", t.numero_registre_transport],
+                  ["Assurance", t.assurance_marchandises],
+                  ["Contact", `${t.telephone} · ${t.email}`],
+                ].map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-3">
+                    <dt className="text-gris-500">{k}</dt>
+                    <dd className="chiffres text-right font-bold">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="grid grid-cols-2 gap-2">
+                {(["refuse", "valide"] as const).map((s) => (
+                  <form key={s} action={changerStatutTransporteur}>
                     <input type="hidden" name="id" value={t.id} />
-                    <input type="hidden" name="statut" value={statut} />
-                    <button className={statut === "valide" ? "bouton" : "bouton-secondaire"}>{statut === "valide" ? "Valider" : "Refuser"}</button>
+                    <input type="hidden" name="statut" value={s} />
+                    <button className={s === "valide" ? "bouton h-12 w-full" : "bouton-danger w-full"}>{s === "valide" ? "Valider" : "Refuser"}</button>
                   </form>
                 ))}
               </div>
             </article>
           ))}
-          {aValider.length === 0 && <p className="text-slate-500">Aucun dossier en attente.</p>}
         </div>
       </section>
 
-      <section>
-        <h2 className="mb-3 text-xl font-bold">Dernières commandes</h2>
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600">
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-h3 font-extrabold">Commandes</h2>
+          <nav className="flex flex-wrap gap-2" aria-label="Filtrer par statut">
+            {FILTRES.map((f) => (
+              <Link
+                key={f.id}
+                href={f.id ? `/admin?statut=${f.id}` : "/admin"}
+                className={`rounded-pastille border-2 px-3 py-1 text-petit font-bold ${filtre === f.id ? "border-noir bg-jaune" : "border-gris-300 bg-blanc hover:border-noir"}`}
+              >
+                {f.libelle}
+              </Link>
+            ))}
+          </nav>
+        </div>
+        <div className="overflow-x-auto rounded-carte bg-blanc shadow-carte">
+          <table className="w-full min-w-[900px] text-left text-petit">
+            <thead className="border-b border-gris-100 text-gris-500">
               <tr>
-                <th className="p-3">Réf.</th>
-                <th className="p-3">Trajet</th>
-                <th className="p-3">Enlèvement</th>
-                <th className="p-3">Client</th>
-                <th className="p-3 text-right">Total</th>
-                <th className="p-3 text-right">Marge</th>
-                <th className="p-3">Statut</th>
-                <th className="p-3"></th>
+                {["Référence", "Client", "Trajet", "Véhicule", "Enlèvement", "Transporteur", "TTC", "Marge", "Statut", ""].map((h) => (
+                  <th key={h} className={`p-3 font-bold ${h === "TTC" || h === "Marge" ? "text-right" : ""}`}>{h}</th>
+                ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-gris-100">
               {commandes.map((c) => (
-                <tr key={c.id}>
-                  <td className="p-3 font-mono">{c.reference}</td>
+                <tr key={c.id} className={c.statut === "payee" ? "bg-jaune-clair/40" : ""}>
+                  <td className="chiffres p-3 font-extrabold">{c.reference}</td>
+                  <td className="p-3">{c.client_nom}<br /><span className="text-gris-500">{c.client_telephone}</span></td>
                   <td className="p-3">{nomCommune(c.commune_depart)} → {nomCommune(c.commune_arrivee)}</td>
-                  <td className="p-3 whitespace-nowrap">{dateReunion(c.date_enlevement)}</td>
-                  <td className="p-3">{c.client_nom}<br /><span className="text-slate-500">{c.client_telephone}</span></td>
-                  <td className="p-3 text-right tabular-nums">{euros(c.total_cts)}</td>
-                  <td className="p-3 text-right tabular-nums">{euros(c.commission_cts + c.frais_service_cts)}</td>
-                  <td className="p-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUTS[c.statut].couleur}`}>{STATUTS[c.statut].libelle}</span></td>
+                  <td className="p-3">{VEHICULES[c.vehicule as keyof typeof VEHICULES].nom}</td>
+                  <td className="chiffres p-3 whitespace-nowrap">{dateCourte(c.date_enlevement)}</td>
+                  <td className={`p-3 ${c.transporteur_nom ? "" : "font-bold text-alerte"}`}>{c.transporteur_nom ?? (c.statut === "payee" ? "Aucun" : "—")}</td>
+                  <td className="chiffres p-3 text-right font-extrabold whitespace-nowrap">{euros(c.total_cts)}</td>
+                  <td className="chiffres p-3 text-right whitespace-nowrap">{euros(c.commission_cts + c.frais_service_cts)}</td>
+                  <td className="p-3"><span className={`pastille whitespace-nowrap ${STATUTS[c.statut].couleur}`}>{STATUTS[c.statut].court}</span></td>
                   <td className="p-3">
                     {["attente_paiement", "payee", "acceptee"].includes(c.statut) && (
                       <form action={annulerCommande}>
                         <input type="hidden" name="id" value={c.id} />
-                        <button className="text-red-600 underline">Annuler</button>
+                        <button className="font-bold text-erreur underline">Annuler</button>
                       </form>
                     )}
                     {c.statut === "livree" && !c.stripe_transfer_id && (
                       <form action={relancerVirement}>
                         <input type="hidden" name="id" value={c.id} />
-                        <button className="text-marque underline">Verser au transporteur</button>
+                        <button className="font-bold whitespace-nowrap underline">Verser au transporteur</button>
                       </form>
                     )}
                   </td>
                 </tr>
               ))}
+              {commandes.length === 0 && (
+                <tr><td colSpan={10} className="p-6 text-center text-gris-500">Aucune commande.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
