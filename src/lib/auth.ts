@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { requete, une } from "./db";
@@ -22,14 +22,20 @@ export type Utilisateur = {
 const empreinte = (jeton: string) => createHash("sha256").update(jeton).digest("hex");
 const nouveauJeton = () => randomBytes(32).toString("base64url");
 
-export async function creerLienConnexion(email: string): Promise<string> {
+const MAX_TENTATIVES_CODE = 5;
+const empreinteCode = (email: string, code: string) => empreinte(`${email.toLowerCase()}:${code}`);
+
+// Crée un lien (pour le navigateur) et un code à 6 chiffres (pour l'app), utilisables une seule fois.
+export async function creerLienConnexion(email: string): Promise<{ jeton: string; code: string }> {
   const jeton = nouveauJeton();
-  await requete("insert into jetons_connexion (empreinte, email, expire_le) values ($1, $2, $3)", [
+  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  await requete("insert into jetons_connexion (empreinte, email, expire_le, code_empreinte) values ($1, $2, $3, $4)", [
     empreinte(jeton),
     email.toLowerCase(),
     new Date(Date.now() + DUREE_LIEN_MS),
+    empreinteCode(email, code),
   ]);
-  return jeton;
+  return { jeton, code };
 }
 
 // Consomme le jeton (une seule fois), crée le compte au besoin et ouvre la session.
@@ -40,13 +46,31 @@ export async function connecterAvecJeton(jeton: string): Promise<boolean> {
      returning email`,
     [empreinte(jeton)],
   );
-  if (!lien) return false;
+  return lien ? ouvrirSession(lien.email) : false;
+}
 
+// Vérifie le code du dernier envoi pour cet e-mail ; 5 essais au plus, puis il faut redemander un code.
+export async function connecterAvecCode(email: string, code: string): Promise<boolean> {
+  const essai = await une<{ valide: boolean }>(
+    `update jetons_connexion set tentatives = tentatives + 1,
+       utilise_le = case when code_empreinte = $2 then now() else utilise_le end
+     where empreinte = (
+       select empreinte from jetons_connexion
+       where email = $1 and utilise_le is null and expire_le > now() and tentatives < $3
+       order by expire_le desc limit 1
+     )
+     returning code_empreinte = $2 as valide`,
+    [email.toLowerCase(), empreinteCode(email, code), MAX_TENTATIVES_CODE],
+  );
+  return essai?.valide ? ouvrirSession(email.toLowerCase()) : false;
+}
+
+async function ouvrirSession(email: string): Promise<boolean> {
   const u = await une<{ id: string }>(
     `insert into utilisateurs (email) values ($1)
      on conflict (email) do update set email = excluded.email
      returning id`,
-    [lien.email],
+    [email],
   );
   const session = nouveauJeton();
   const expire = new Date(Date.now() + DUREE_SESSION_MS);

@@ -11,7 +11,7 @@ export default async function Connexion({ searchParams }: { searchParams: Promis
         </span>
         <div>
           <h1 className="titre text-h2">Connexion</h1>
-          <p className="mt-1 text-gris-500">Recevez un lien de connexion par e-mail, sans mot de passe.</p>
+          <p className="mt-1 text-gris-500">Recevez un code de connexion par e-mail, sans mot de passe.</p>
         </div>
         {erreur && <p className="rounded-bouton bg-erreur-clair p-3 text-petit font-bold text-erreur">Lien expiré ou déjà utilisé, demandez-en un nouveau.</p>}
         <FormulaireConnexion retour={retour?.startsWith("/") ? retour : "/transporteur"} />
