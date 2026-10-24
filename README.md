@@ -30,6 +30,7 @@ code client à 4 chiffres. La trésorerie reste positive à tout moment.
 ## Stack
 
 Next.js 15 (App Router, Server Actions) · PostgreSQL 16 · Stripe Checkout + Connect Express · Tailwind CSS ·
+MapLibre + OpenFreeMap (cartes) · Base Adresse Nationale (adresses) · Firebase Cloud Messaging (notifications) ·
 Docker Compose sur VPS (cohabite avec les autres applications du serveur) · Capacitor (app mobile).
 
 Aucun service payant hors Stripe : la base, l'hébergement et les e-mails tournent sur le VPS et la messagerie Hostinger.
@@ -101,18 +102,51 @@ Pense à copier régulièrement ce dossier hors du VPS.
 
 ## Application mobile (iOS / Android)
 
-L'app est une coque Capacitor qui charge la plateforme en ligne : **une modification du site met à jour
-l'app sans republier sur les stores**. Une fois le site en ligne :
+Coque Capacitor 8 (`android/`, `ios/`, `capacitor.config.ts`) qui charge la plateforme en ligne :
+**une modification du site met à jour l'app sans republier sur les stores.** Les fonctions natives
+passent par des plugins : GPS en arrière-plan (`@capacitor-community/background-geolocation`),
+notifications (`@capacitor/push-notifications`).
+
+L'adresse chargée par l'app se règle dans `capacitor.config.ts` (`server.url`) ou via `CAPACITOR_SERVER_URL`.
+⚠️ L'identifiant `re.fretpei.app` est **définitif** une fois publié : à valider avant la première mise en ligne.
+
+### Android : APK de test
+
+Chaque modification de `android/`, `mobile/` ou `capacitor.config.ts` sur `main` lance
+**Actions → App Android** (ou lancement manuel : *Run workflow*). L'APK de test se télécharge dans
+les *Artifacts* du build, puis s'installe sur un téléphone Android (autoriser les sources inconnues).
+
+### Notifications : Firebase (une fois)
+
+1. https://console.firebase.google.com → créer un projet (ex. « FretPei »).
+2. Ajouter une app **Android** avec l'identifiant `re.fretpei.app` → télécharger `google-services.json`
+   → coller son contenu dans le secret GitHub **`GOOGLE_SERVICES_JSON`**.
+3. *Paramètres du projet → Comptes de service → Générer une nouvelle clé privée* (fichier JSON)
+   → sur le VPS, ajouter à `/opt/fretpei/.env` :
+   `FIREBASE_SERVICE_ACCOUNT=<contenu du JSON encodé en base64 : base64 -w0 fichier.json>`
+   puis `cd /opt/fretpei && docker compose up -d`.
+
+Sans cette configuration, l'app fonctionne mais les notifications sont seulement journalisées côté serveur.
+
+### Play Store : AAB signé
+
+1. Générer la clé de signature **une seule fois et la conserver précieusement** (sans elle, plus de mise à jour possible) :
+   `keytool -genkeypair -v -keystore fretpei.jks -alias fretpei -keyalg RSA -keysize 2048 -validity 10000`
+2. Secrets GitHub : `ANDROID_KEYSTORE_BASE64` (`base64 -w0 fretpei.jks`), `ANDROID_KEYSTORE_PASSWORD`,
+   `ANDROID_KEY_ALIAS` (`fretpei`), `ANDROID_KEY_PASSWORD`.
+3. Le build produit alors aussi `app-release.aab`, à téléverser dans la Play Console
+   (activer la signature d'application par Google Play).
+4. Fiche Play Store : déclarer l'usage de la **localisation en arrière-plan** (partage de position
+   pendant les courses) et fournir la politique de confidentialité.
+
+### iOS (sur Mac avec Xcode)
 
 ```bash
-npm i @capacitor/core @capacitor/cli @capacitor/ios @capacitor/android
-CAPACITOR_SERVER_URL=https://<domaine> npx cap add android
-CAPACITOR_SERVER_URL=https://<domaine> npx cap add ios   # nécessite un Mac + Xcode
+npm install && npx cap sync ios && npx cap open ios
 ```
-
-Pour être accepté par Apple, il faut ajouter de vraies fonctions natives (plugins `@capacitor/push-notifications`,
-`@capacitor/geolocation`, `@capacitor/camera`) : c'est la prochaine étape côté transporteur.
-Comptes nécessaires : Google Play (25 $ une fois), Apple Developer (99 $/an).
+Dans Xcode : choisir l'équipe Apple Developer, activer les capacités *Push Notifications* et
+*Background Modes → Location updates*, puis *Product → Archive* pour l'envoyer sur App Store Connect.
+Notifications iOS : à finaliser (jeton APNs → Firebase), prochaine étape côté iPhone.
 
 ## Commandes utiles
 
