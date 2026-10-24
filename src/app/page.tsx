@@ -1,4 +1,5 @@
 import { ArrowRight, KeyRound, ShieldCheck, Store, Tag, Truck } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { FormulaireReservation } from "@/components/FormulaireReservation";
 
@@ -12,7 +13,10 @@ export default async function Accueil({ searchParams }: { searchParams: Promise<
   const { annule } = await searchParams;
   return (
     <>
-      <section className="bg-noir pb-32 text-blanc">
+      <section className="relative isolate overflow-hidden bg-noir pb-32 text-blanc">
+        {/* Photo de fond (public/hero.jpg) assombrie pour garder le texte lisible (contraste AA). */}
+        <Image src="/hero.jpg" alt="" fill priority sizes="100vw" className="-z-20 object-cover object-[center_40%]" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-noir/90 via-noir/70 to-noir/30" />
         <div className="mx-auto max-w-6xl px-4 pt-8 sm:px-6 sm:pt-14">
           <h1 className="titre max-w-3xl text-[2.25rem] leading-[1.05] sm:text-h1 lg:text-[4rem]">
             Vos marchandises livrées partout sur l&apos;île, au prix annoncé.
@@ -33,7 +37,7 @@ export default async function Accueil({ searchParams }: { searchParams: Promise<
         </div>
       </section>
 
-      <div className="mx-auto -mt-24 max-w-6xl space-y-10 px-4 sm:px-6">
+      <div className="relative z-10 mx-auto -mt-24 max-w-6xl space-y-10 px-4 sm:px-6">
         {annule && (
           <p className="rounded-bouton bg-alerte-clair p-4 font-bold text-alerte">
             Paiement annulé : votre commande n&apos;a pas été validée.
