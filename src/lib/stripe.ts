@@ -21,3 +21,9 @@ export function paiementDemo(): boolean {
 export function urlSite(): string {
   return (process.env.SITE_URL ?? "http://localhost:3000").replace(/\/$/, "");
 }
+
+// Un transporteur ne fait que recevoir des virements : il est prêt quand les transferts
+// sont actifs et que les versements vers son IBAN sont autorisés (pas besoin d'encaisser).
+export function comptePret(compte: Stripe.Account | null | undefined): boolean {
+  return Boolean(compte?.capabilities?.transfers === "active" && compte.payouts_enabled);
+}

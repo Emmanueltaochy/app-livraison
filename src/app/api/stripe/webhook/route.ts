@@ -1,7 +1,7 @@
 import type Stripe from "stripe";
 import { requete, une } from "@/lib/db";
 import { notifierNouvelleCourse } from "@/lib/nouvelleCourse";
-import { stripe } from "@/lib/stripe";
+import { stripe, comptePret } from "@/lib/stripe";
 
 // Stripe → nous : confirmation de paiement et mise à jour des comptes transporteurs.
 export async function POST(req: Request) {
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     const compte = event.data.object;
     await requete("update transporteurs set stripe_pret = $2 where stripe_account_id = $1", [
       compte.id,
-      Boolean(compte.charges_enabled && compte.payouts_enabled),
+      comptePret(compte),
     ]);
   }
 

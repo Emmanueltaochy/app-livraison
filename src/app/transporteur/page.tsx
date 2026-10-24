@@ -5,7 +5,7 @@ import { getCommune } from "@/lib/communes";
 import { requete } from "@/lib/db";
 import { euros, VEHICULES } from "@/lib/pricing";
 import { dateReunion } from "@/lib/statuts";
-import { stripe, stripeConfigure } from "@/lib/stripe";
+import { comptePret, stripe, stripeConfigure } from "@/lib/stripe";
 import { chargerTransporteur, coursesEnCours, nomCommune } from "./donnees";
 import { FormulaireInscription } from "./FormulaireInscription";
 import { type CourseDisponible, ListeCourses } from "./ListeCourses";
@@ -16,7 +16,8 @@ const approche = (lat: number | null, lng: number | null, commune: string) =>
   lat != null && lng != null ? { lat: Math.round(lat * 100) / 100, lng: Math.round(lng * 100) / 100 } : getCommune(commune)!;
 
 // Onglet « Courses » : les courses payées en attente d'un transporteur.
-export default async function Courses() {
+export default async function Courses({ searchParams }: { searchParams: Promise<{ stripe_erreur?: string }> }) {
+  const { stripe_erreur: erreurStripe } = await searchParams;
   const { u, t } = await chargerTransporteur();
 
   if (!t) {
@@ -62,8 +63,8 @@ export default async function Courses() {
   // Sans Stripe configuré (démo locale), on ne bloque pas les transporteurs.
   let stripePret: boolean = t.stripe_pret || !stripeConfigure();
   if (t.stripe_account_id && !stripePret && stripeConfigure()) {
-    const compte = await stripe().accounts.retrieve(t.stripe_account_id);
-    stripePret = Boolean(compte.charges_enabled && compte.payouts_enabled);
+    const compte = await stripe().accounts.retrieve(t.stripe_account_id).catch(() => null);
+    stripePret = comptePret(compte);
     if (stripePret) await requete("update transporteurs set stripe_pret = true where id = $1", [t.id]);
   }
 
@@ -119,6 +120,11 @@ export default async function Courses() {
             <Banknote className="size-7" /> Activez vos virements
           </p>
           <p className="mt-1">Renseignez votre IBAN avec Stripe pour être payé après chaque livraison.</p>
+          {erreurStripe && (
+            <p className="mt-3 rounded-bouton bg-erreur-clair p-3 text-petit font-bold text-erreur" role="alert">
+              Stripe a refusé l&apos;activation : {erreurStripe}
+            </p>
+          )}
           <form action={connecterStripe}>
             <button className="mt-4 flex h-14 w-full items-center justify-center rounded-bouton bg-noir font-extrabold text-blanc">
               Activer avec Stripe · 2 min

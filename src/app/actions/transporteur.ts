@@ -76,27 +76,36 @@ async function transporteurValide(): Promise<Transporteur> {
 
 export async function connecterStripe() {
   const t = await transporteurValide();
-  if (!stripeConfigure()) throw new Error("Stripe non configuré");
-  let compteId = t.stripe_account_id;
-  if (!compteId) {
-    const compte = await stripe().accounts.create({
-      type: "express",
-      country: "FR",
-      capabilities: { transfers: { requested: true } },
-      business_type: "individual",
-      business_profile: { mcc: "4214", product_description: "Transport de marchandises" },
-      metadata: { transporteur_id: t.id },
+  let url: string;
+  try {
+    if (!stripeConfigure()) throw new Error("Stripe n'est pas configuré sur le serveur.");
+    let compteId = t.stripe_account_id;
+    if (!compteId) {
+      const compte = await stripe().accounts.create({
+        type: "express",
+        country: "FR",
+        capabilities: { transfers: { requested: true } },
+        business_type: "individual",
+        business_profile: { mcc: "4214", product_description: "Transport de marchandises" },
+        metadata: { transporteur_id: t.id },
+      });
+      compteId = compte.id;
+      await requete("update transporteurs set stripe_account_id = $2 where id = $1", [t.id, compteId]);
+    }
+    const lien = await stripe().accountLinks.create({
+      account: compteId,
+      type: "account_onboarding",
+      refresh_url: `${urlSite()}/transporteur`,
+      return_url: `${urlSite()}/transporteur`,
     });
-    compteId = compte.id;
-    await requete("update transporteurs set stripe_account_id = $2 where id = $1", [t.id, compteId]);
+    url = lien.url;
+  } catch (e) {
+    // Erreur Stripe (Connect non activé, profil plateforme incomplet…) : affichée au chauffeur plutôt qu'une page d'erreur.
+    console.error("connecterStripe", e);
+    const message = e instanceof Error ? e.message : "Erreur inconnue";
+    redirect(`/transporteur?stripe_erreur=${encodeURIComponent(message.slice(0, 300))}`);
   }
-  const lien = await stripe().accountLinks.create({
-    account: compteId,
-    type: "account_onboarding",
-    refresh_url: `${urlSite()}/transporteur`,
-    return_url: `${urlSite()}/transporteur`,
-  });
-  redirect(lien.url);
+  redirect(url);
 }
 
 export async function accepterCourse(form: FormData) {
