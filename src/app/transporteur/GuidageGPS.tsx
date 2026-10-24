@@ -9,6 +9,7 @@ import {
   ArrowUpLeft,
   ArrowUpRight,
   Flag,
+  Navigation,
   RotateCw,
   Volume2,
   VolumeX,
@@ -71,11 +72,21 @@ function parler(texte: string) {
   window.speechSynthesis.speak(u);
 }
 
+// Flèche de navigation (comme Google Maps) : posée à plat sur la route, pointe dans le sens de la marche.
 function elementCamion() {
   const el = document.createElement("div");
-  el.className = "flex size-12 items-center justify-center rounded-full border-[3px] border-jaune bg-noir text-[1.5rem] shadow-carte";
-  el.textContent = "🚚";
+  el.innerHTML =
+    '<svg viewBox="0 0 48 48" width="64" height="64" aria-hidden="true"><circle cx="24" cy="24" r="21" fill="#121212" stroke="#FFC800" stroke-width="3"/><path d="M24 10 35 35 24 29 13 35Z" fill="#FFC800"/></svg>';
+  el.setAttribute("aria-label", "Votre position");
   return el;
+}
+
+// Cap (en degrés, 0 = nord) pour aller de a vers b.
+function cap(a: Point, b: Point): number {
+  const rad = Math.PI / 180;
+  const y = Math.sin((b.lng - a.lng) * rad) * Math.cos(b.lat * rad);
+  const x = Math.cos(a.lat * rad) * Math.sin(b.lat * rad) - Math.sin(a.lat * rad) * Math.cos(b.lat * rad) * Math.cos((b.lng - a.lng) * rad);
+  return (Math.atan2(y, x) / rad + 360) % 360;
 }
 
 // Guidage GPS plein écran dans l'app : la carte suit le camion, instruction suivante en haut
@@ -86,6 +97,9 @@ export function GuidageGPS({ destination, libelle, onFermer }: { destination: Po
   const camion = useRef<Marker | null>(null);
   const [prete, setPrete] = useState(false);
   const [moi, setMoi] = useState<Point>();
+  const [direction, setDirection] = useState<number | null>(null);
+  const [suivre, setSuivre] = useState(true);
+  const precedent = useRef<Point | null>(null);
   const [itineraire, setItineraire] = useState<Itineraire | null>(null);
   const [erreur, setErreur] = useState<string>();
   const [voix, setVoix] = useState(true);
@@ -98,11 +112,27 @@ export function GuidageGPS({ destination, libelle, onFermer }: { destination: Po
     import("maplibre-gl").then(({ AttributionControl, Map, setWorkerUrl }) => {
       if (annule || !conteneur.current) return;
       setWorkerUrl("/maplibre-gl-worker.mjs");
-      const m = new Map({ container: conteneur.current, style: STYLE, center: [destination.lng, destination.lat], zoom: 13, attributionControl: false });
+      const m = new Map({ container: conteneur.current, style: STYLE, center: [destination.lng, destination.lat], zoom: 13, attributionControl: false, maxPitch: 70 });
+      // Le chauffeur déplace la carte : on arrête de la recentrer jusqu'à « Recentrer ».
+      m.on("dragstart", () => setSuivre(false));
       m.addControl(new AttributionControl({ compact: true }), "bottom-left");
       m.on("load", () => {
         // Mention repliée en « i » dès l'affichage (MapLibre la déplie au chargement).
         m.getContainer().querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");
+        // Bâtiments en relief, pour la vue 3D.
+        m.addLayer({
+          id: "batiments-3d",
+          type: "fill-extrusion",
+          source: "openmaptiles",
+          "source-layer": "building",
+          minzoom: 14,
+          paint: {
+            "fill-extrusion-color": "#dedbd3",
+            "fill-extrusion-height": ["coalesce", ["get", "render_height"], 6],
+            "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+            "fill-extrusion-opacity": 0.85,
+          },
+        });
         m.addSource("guidage", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         m.addLayer({ id: "guidage-bord", type: "line", source: "guidage", paint: { "line-color": "#121212", "line-width": 11 }, layout: { "line-cap": "round", "line-join": "round" } });
         m.addLayer({ id: "guidage", type: "line", source: "guidage", paint: { "line-color": "#FFC800", "line-width": 7 }, layout: { "line-cap": "round", "line-join": "round" } });
@@ -125,11 +155,23 @@ export function GuidageGPS({ destination, libelle, onFermer }: { destination: Po
 
   // Position : suivi GPS partagé (app) ou géolocalisation du téléphone ; l'écran reste allumé.
   useEffect(() => {
-    const auPartage = (e: Event) => setMoi((e as CustomEvent<Point>).detail);
+    // Cap : celui du GPS quand on roule, sinon calculé entre deux positions assez éloignées.
+    const recevoir = (p: Point, gps?: number | null, vitesse?: number | null) => {
+      setMoi(p);
+      const avant = precedent.current;
+      if (gps != null && !Number.isNaN(gps) && (vitesse ?? 0) > 1.5) {
+        setDirection(gps);
+        precedent.current = p;
+      } else if (!avant || haversineKm(avant, p) * 1000 > 8) {
+        if (avant) setDirection(cap(avant, p));
+        precedent.current = p;
+      }
+    };
+    const auPartage = (e: Event) => recevoir((e as CustomEvent<Point>).detail);
     window.addEventListener("fretpei:position", auPartage);
     const id =
       "geolocation" in navigator
-        ? navigator.geolocation.watchPosition((p) => setMoi({ lat: p.coords.latitude, lng: p.coords.longitude }), () => setErreur("Activez la localisation pour être guidé."), {
+        ? navigator.geolocation.watchPosition((p) => recevoir({ lat: p.coords.latitude, lng: p.coords.longitude }, p.coords.heading, p.coords.speed), () => setErreur("Activez la localisation pour être guidé."), {
             enableHighAccuracy: true,
             maximumAge: 3000,
           })
@@ -162,16 +204,31 @@ export function GuidageGPS({ destination, libelle, onFermer }: { destination: Po
       .catch(() => setErreur("Itinéraire indisponible : utilisez Google Maps ou Waze."));
   }, [moi, destination.lat, destination.lng]);
 
-  // La carte suit le camion, zoomée comme un GPS.
+  // Sans mouvement (au départ), on regarde dans le sens de l'itinéraire.
+  const capRoute = itineraire && moi && itineraire.ligne.length > 1 ? cap(moi, { lng: itineraire.ligne[Math.min(3, itineraire.ligne.length - 1)][0], lat: itineraire.ligne[Math.min(3, itineraire.ligne.length - 1)][1] }) : 0;
+  const capActuel = direction ?? capRoute;
+
+  // Vue 3D type GPS : carte inclinée, orientée dans le sens de la marche, la flèche en bas de l'écran.
   useEffect(() => {
     const m = carte.current;
     if (!prete || !m || !moi) return;
     import("maplibre-gl").then(({ Marker }) => {
-      if (!camion.current) camion.current = new Marker({ element: elementCamion() }).setLngLat([moi.lng, moi.lat]).addTo(m);
-      else camion.current.setLngLat([moi.lng, moi.lat]);
-      m.easeTo({ center: [moi.lng, moi.lat], zoom: 16, duration: 800 });
+      if (!camion.current) {
+        camion.current = new Marker({ element: elementCamion(), rotationAlignment: "map", pitchAlignment: "map" }).setLngLat([moi.lng, moi.lat]).addTo(m);
+      } else camion.current.setLngLat([moi.lng, moi.lat]);
+      camion.current.setRotation(capActuel);
+      if (suivre) {
+        m.easeTo({
+          center: [moi.lng, moi.lat],
+          bearing: capActuel,
+          pitch: 60,
+          zoom: 17,
+          padding: { top: m.getContainer().clientHeight * 0.55, bottom: 0, left: 0, right: 0 },
+          duration: 900,
+        });
+      }
     });
-  }, [prete, moi]);
+  }, [prete, moi, capActuel, suivre]);
 
   useEffect(() => {
     const source = carte.current?.getSource("guidage") as GeoJSONSource | undefined;
@@ -213,7 +270,14 @@ export function GuidageGPS({ destination, libelle, onFermer }: { destination: Po
         )}
       </div>
 
-      <div ref={conteneur} className="relative flex-1" role="img" aria-label="Guidage GPS" />
+      <div className="relative flex-1">
+        <div ref={conteneur} className="size-full" role="img" aria-label="Guidage GPS" />
+        {!suivre && (
+          <button type="button" onClick={() => setSuivre(true)} className="absolute bottom-6 left-1/2 flex h-12 -translate-x-1/2 items-center gap-2 rounded-pastille bg-noir px-5 font-extrabold text-jaune shadow-flottante">
+            <Navigation className="size-5" /> Recentrer
+          </button>
+        )}
+      </div>
 
       <div className="flex items-center gap-3 border-t border-noir-700 bg-noir px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         <button type="button" onClick={onFermer} aria-label="Quitter le guidage" className="flex size-12 shrink-0 items-center justify-center rounded-pastille bg-noir-700">
