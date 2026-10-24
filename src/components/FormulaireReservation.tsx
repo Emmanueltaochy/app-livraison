@@ -310,7 +310,7 @@ export function FormulaireReservation() {
       </aside>
 
       {/* Mobile : prix toujours visible ; « Continuer » jusqu'à la dernière étape, puis paiement. */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gris-100 bg-blanc px-4 pt-3 pb-4 shadow-flottante lg:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gris-100 bg-blanc px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-flottante lg:hidden">
         <p className="mb-2 flex items-end justify-between">
           <span>
             <span className="block text-petit text-gris-500">Total TTC · prix fixe</span>

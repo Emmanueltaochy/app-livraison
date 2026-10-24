@@ -12,14 +12,16 @@ export const metadata: Metadata = {
   description: SLOGAN,
 };
 
-export const viewport: Viewport = { themeColor: "#121212", width: "device-width", initialScale: 1 };
+// viewportFit « cover » : dans l'app iPhone, la page passe sous la barre d'état ;
+// les marges « safe-area » ci-dessous gardent le contenu hors de l'encoche et de la barre.
+export const viewport: Viewport = { themeColor: "#121212", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="fr" className={archivo.variable}>
       <body className="flex min-h-dvh flex-col font-sans antialiased">
-        <header className="bg-noir text-blanc">
-          <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <header className="bg-noir pt-[env(safe-area-inset-top)] text-blanc">
+          <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 py-4 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:px-6">
             <Link href="/" aria-label={`${MARQUE}, accueil`}>
               <Logo />
             </Link>
