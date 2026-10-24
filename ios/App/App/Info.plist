@@ -75,5 +75,8 @@
 		<string>location</string>
 		<string>remote-notification</string>
 	</array>
+	<!-- Pas de chiffrement propriétaire (HTTPS standard) : évite la question à chaque envoi TestFlight. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

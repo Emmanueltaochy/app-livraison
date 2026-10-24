@@ -139,6 +139,23 @@ Sans cette configuration, l'app fonctionne mais les notifications sont seulement
 4. Fiche Play Store : déclarer l'usage de la **localisation en arrière-plan** (partage de position
    pendant les courses) et fournir la politique de confidentialité.
 
+### iOS sans Xcode : TestFlight depuis GitHub (recommandé)
+
+GitHub construit, signe et envoie l'app sur TestFlight depuis ses propres Mac.
+
+1. **Identifiant** : https://developer.apple.com/account/resources/identifiers → **+** → *App IDs* → *App*,
+   Bundle ID explicite `re.fretpei.app`, cocher **Push Notifications** → enregistrer.
+2. **Fiche de l'app** : https://appstoreconnect.apple.com → *Apps* → **+** → *Nouvelle app* → iOS,
+   nom « FretPéi » (ou le nom définitif), langue Français, Bundle ID `re.fretpei.app`, SKU `fretpei`.
+3. **Clé API** : App Store Connect → *Utilisateurs et accès* → *Intégrations* → *App Store Connect API*
+   → **+** → nom « GitHub », accès **Admin** → télécharger `AuthKey_XXXX.p8` (une seule fois),
+   noter le **Key ID** et l'**Issuer ID**.
+4. **Secrets GitHub** : `APPLE_TEAM_ID`, `APPSTORE_API_KEY_ID`, `APPSTORE_API_ISSUER_ID`,
+   `APPSTORE_API_KEY_P8` (sur Mac : `base64 -i AuthKey_XXXX.p8 | pbcopy`, puis coller).
+5. **Actions → TestFlight iPhone → Run workflow** (≈ 10 min), puis 10 à 30 min de traitement chez Apple.
+6. Sur l'iPhone : app **TestFlight** → FretPéi → *Installer* (ajoute-toi d'abord comme testeur interne
+   dans App Store Connect → TestFlight).
+
 ### iOS : tester sur ton iPhone (Mac + Xcode)
 
 ```bash
