@@ -80,45 +80,48 @@ body {
   box-shadow: var(--shadow-focus);
 }
 
-.titre {
-  @apply large font-extrabold tracking-tight;
-}
+/* Composants : dans la couche « components » pour que les utilitaires Tailwind (pl-10…) gardent la priorité. */
+@layer components {
+  .titre {
+    @apply large font-extrabold tracking-tight;
+  }
 
-.champ {
-  @apply h-12 w-full rounded-champ border border-gris-300 bg-blanc px-3.5 text-corps text-noir outline-none placeholder:text-gris-500 focus:border-noir focus:shadow-focus;
-}
-textarea.champ {
-  @apply h-auto py-3;
-}
+  .champ {
+    @apply h-12 w-full rounded-champ border border-gris-300 bg-blanc px-3.5 text-corps text-noir outline-none placeholder:text-gris-500 focus:border-noir focus:shadow-focus;
+  }
+  textarea.champ {
+    @apply h-auto py-3;
+  }
 
-.etiquette {
-  @apply mb-1.5 block text-petit font-bold text-noir;
-}
+  .etiquette {
+    @apply mb-1.5 block text-petit font-bold text-noir;
+  }
 
-.bouton {
-  @apply inline-flex h-14 items-center justify-center gap-2 rounded-bouton bg-jaune px-5 font-extrabold text-noir transition hover:bg-jaune-survol disabled:cursor-not-allowed disabled:bg-gris-100 disabled:text-gris-500;
-}
+  .bouton {
+    @apply inline-flex h-14 items-center justify-center gap-2 rounded-bouton bg-jaune px-5 font-extrabold text-noir transition hover:bg-jaune-survol disabled:cursor-not-allowed disabled:bg-gris-100 disabled:text-gris-500;
+  }
 
-.bouton-noir {
-  @apply inline-flex h-12 items-center justify-center gap-2 rounded-bouton bg-noir px-5 font-bold text-blanc transition hover:bg-noir-700;
-}
+  .bouton-noir {
+    @apply inline-flex h-12 items-center justify-center gap-2 rounded-bouton bg-noir px-5 font-bold text-blanc transition hover:bg-noir-700;
+  }
 
-.bouton-secondaire {
-  @apply inline-flex h-12 items-center justify-center gap-2 rounded-bouton border-2 border-noir bg-blanc px-5 font-bold text-noir transition hover:bg-gris-100;
-}
+  .bouton-secondaire {
+    @apply inline-flex h-12 items-center justify-center gap-2 rounded-bouton border-2 border-noir bg-blanc px-5 font-bold text-noir transition hover:bg-gris-100;
+  }
 
-.bouton-danger {
-  @apply inline-flex h-12 items-center justify-center gap-2 rounded-bouton border-2 border-erreur bg-blanc px-5 font-bold text-erreur transition hover:bg-erreur-clair;
-}
+  .bouton-danger {
+    @apply inline-flex h-12 items-center justify-center gap-2 rounded-bouton border-2 border-erreur bg-blanc px-5 font-bold text-erreur transition hover:bg-erreur-clair;
+  }
 
-.carte {
-  @apply rounded-carte bg-blanc p-5 shadow-carte sm:p-6;
-}
+  .carte {
+    @apply rounded-carte bg-blanc p-5 shadow-carte sm:p-6;
+  }
 
-.pastille {
-  @apply inline-flex items-center gap-1.5 rounded-pastille px-2.5 py-1 text-petit font-bold;
-}
+  .pastille {
+    @apply inline-flex items-center gap-1.5 rounded-pastille px-2.5 py-1 text-petit font-bold;
+  }
 
-.numero-etape {
-  @apply inline-flex size-7 items-center justify-center rounded-pastille bg-noir text-petit font-extrabold text-jaune;
+  .numero-etape {
+    @apply inline-flex size-7 items-center justify-center rounded-pastille bg-noir text-petit font-extrabold text-jaune;
+  }
 }

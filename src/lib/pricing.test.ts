@@ -16,6 +16,14 @@ describe("distanceRouteKm", () => {
     expect(distanceRouteKm("saint-louis", "cilaos")).toBeGreaterThan(30);
   });
 
+  it("utilise les coordonnées exactes quand elles sont connues", () => {
+    // 12 rue de Paris (Saint-Denis) → mairie de Saint-Pierre
+    const km = distanceRouteKm("saint-denis", "saint-pierre", { lat: -20.8808, lng: 55.4491 }, { lat: -21.3393, lng: 55.4781 });
+    expect(km).toBeGreaterThan(65);
+    expect(km).toBeLessThan(80);
+    expect(distanceRouteKm("le-port", "le-port", { lat: -20.937, lng: 55.293 }, { lat: -20.9371, lng: 55.2931 })).toBe(2);
+  });
+
   it("refuse une commune inconnue", () => {
     expect(() => distanceRouteKm("paris", "saint-denis")).toThrow();
   });

@@ -2,7 +2,7 @@
 // le prix, on ne fait jamais confiance au montant envoyé par le navigateur.
 // Tous les montants sont en centimes.
 
-import { getCommune, type Commune } from "./communes";
+import { getCommune, type Point } from "./communes";
 
 export type VehiculeId = "petit" | "moyen" | "grand";
 
@@ -57,6 +57,9 @@ export type DemandeDevis = {
   assuranceRenforcee?: boolean;
   express?: boolean;
   dateEnlevement?: Date;
+  // Coordonnées exactes des adresses (Base Adresse Nationale) ; à défaut, centre de la commune.
+  pointDepart?: Point;
+  pointArrivee?: Point;
 };
 
 export type Devis = {
@@ -70,7 +73,7 @@ export type Devis = {
   lignes: { libelle: string; montantCts: number }[];
 };
 
-function haversineKm(a: Commune, b: Commune): number {
+function haversineKm(a: Point, b: Point): number {
   const R = 6371;
   const rad = (d: number) => (d * Math.PI) / 180;
   const dLat = rad(b.lat - a.lat);
@@ -79,13 +82,17 @@ function haversineKm(a: Commune, b: Commune): number {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-export function distanceRouteKm(departId: string, arriveeId: string): number {
+export function distanceRouteKm(departId: string, arriveeId: string, pointDepart?: Point, pointArrivee?: Point): number {
   const a = getCommune(departId);
   const b = getCommune(arriveeId);
   if (!a || !b) throw new Error("Commune inconnue");
-  if (a.id === b.id) return 5; // trajet intra-commune forfaitaire
-  const km = haversineKm(a, b) * TARIFS.facteurRoute + (a.detourKm ?? 0) + (b.detourKm ?? 0);
-  return Math.round(km);
+  if (!pointDepart || !pointArrivee) {
+    if (a.id === b.id) return 5; // trajet intra-commune forfaitaire
+    return Math.round(haversineKm(a, b) * TARIFS.facteurRoute + (a.detourKm ?? 0) + (b.detourKm ?? 0));
+  }
+  // Adresses précises : détour de montagne compté seulement en entrant ou sortant d'un cirque.
+  const detour = a.id === b.id ? 0 : (a.detourKm ?? 0) + (b.detourKm ?? 0);
+  return Math.max(2, Math.round(haversineKm(pointDepart, pointArrivee) * TARIFS.facteurRoute + detour));
 }
 
 // Bouchons : lun–ven 6h30–8h30 et 15h30–18h30, heure de La Réunion (UTC+4, sans heure d'été).
@@ -112,7 +119,7 @@ export function calculerDevis(d: DemandeDevis): Devis {
   const v = VEHICULES[d.vehicule];
   if (!v) throw new Error("Véhicule inconnu");
 
-  const distanceKm = distanceRouteKm(d.depart, d.arrivee);
+  const distanceKm = distanceRouteKm(d.depart, d.arrivee, d.pointDepart, d.pointArrivee);
   const lignes: Devis["lignes"] = [];
 
   const trajet = Math.max(v.minimumCts, v.baseCts + distanceKm * v.parKmCts);
@@ -128,7 +135,7 @@ export function calculerDevis(d: DemandeDevis): Devis {
   }
   if (d.express) {
     const m = Math.round(trajet * TARIFS.expressTaux);
-    lignes.push({ libelle: "Express (dans les 2 h)", montantCts: m });
+    lignes.push({ libelle: "Express · prise en charge dans l'heure", montantCts: m });
     transport += m;
   }
   if (d.aideManutention) {

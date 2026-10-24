@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { getCommune } from "@/lib/communes";
+import { estSurLIle, getCommune, type Point } from "@/lib/communes";
 import { calculerDevis } from "@/lib/pricing";
 import { paiementDemo, stripe, stripeConfigure, urlSite } from "@/lib/stripe";
 import { utilisateurCourant } from "@/lib/auth";
@@ -11,25 +11,22 @@ import { MARQUE } from "@/lib/config";
 
 const coche = z.preprocess((v) => v === "on" || v === "true", z.boolean());
 const entier = z.coerce.number().int().min(0).max(30);
+const coordonnee = z.preprocess((v) => (v === "" || v == null ? undefined : Number(v)), z.number().finite().optional());
+
+// Délai de prise en charge d'une commande « Maintenant » (traitée en express).
+const DELAI_MAINTENANT_MS = 60 * 60 * 1000;
 
 const schema = z.object({
   commune_depart: z.string().refine((id) => getCommune(id), "Commune de départ inconnue"),
   adresse_depart: z.string().trim().min(5, "Adresse de départ trop courte"),
   commune_arrivee: z.string().refine((id) => getCommune(id), "Commune d'arrivée inconnue"),
   adresse_arrivee: z.string().trim().min(5, "Adresse d'arrivée trop courte"),
-  date_enlevement: z.string().transform((s, ctx) => {
-    // Le champ datetime-local est saisi en heure de La Réunion (UTC+4).
-    const d = new Date(`${s}:00+04:00`);
-    if (Number.isNaN(d.getTime())) {
-      ctx.addIssue({ code: "custom", message: "Date invalide" });
-      return z.NEVER;
-    }
-    if (d.getTime() < Date.now() - 15 * 60 * 1000) {
-      ctx.addIssue({ code: "custom", message: "La date d'enlèvement est passée" });
-      return z.NEVER;
-    }
-    return d;
-  }),
+  mode: z.enum(["programme", "maintenant"]).default("programme"),
+  depart_lat: coordonnee,
+  depart_lng: coordonnee,
+  arrivee_lat: coordonnee,
+  arrivee_lng: coordonnee,
+  date_enlevement: z.string().optional(),
   description: z.string().trim().min(3, "Décrivez la marchandise").max(1000),
   vehicule: z.enum(["petit", "moyen", "grand"]),
   aide_manutention: coche,
@@ -49,6 +46,21 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
   if (!parse.success) return { erreur: parse.error.issues[0]?.message ?? "Formulaire invalide" };
   const f = parse.data;
 
+  let dateEnlevement: Date;
+  if (f.mode === "maintenant") {
+    dateEnlevement = new Date(Date.now() + DELAI_MAINTENANT_MS);
+    f.express = true;
+  } else {
+    // Date et heure saisies en heure de La Réunion (UTC+4).
+    dateEnlevement = new Date(`${f.date_enlevement}:00+04:00`);
+    if (Number.isNaN(dateEnlevement.getTime())) return { erreur: "Date invalide" };
+    if (dateEnlevement.getTime() < Date.now() - 15 * 60 * 1000) return { erreur: "La date d'enlèvement est passée" };
+  }
+  const point = (lat?: number, lng?: number): Point | undefined =>
+    lat !== undefined && lng !== undefined && estSurLIle({ lat, lng }) ? { lat, lng } : undefined;
+  const pointDepart = point(f.depart_lat, f.depart_lng);
+  const pointArrivee = point(f.arrivee_lat, f.arrivee_lng);
+
   // Le prix est recalculé ici : celui affiché dans le navigateur n'est qu'indicatif.
   const devis = calculerDevis({
     depart: f.commune_depart,
@@ -59,7 +71,9 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
     etagesArrivee: f.etages_arrivee,
     assuranceRenforcee: f.assurance_renforcee,
     express: f.express,
-    dateEnlevement: f.date_enlevement,
+    dateEnlevement,
+    pointDepart,
+    pointArrivee,
   });
 
   const utilisateur = await utilisateurCourant().catch(() => null);
@@ -74,8 +88,9 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
          client_id, compte_pro_id, client_nom, client_telephone, client_email,
          commune_depart, adresse_depart, commune_arrivee, adresse_arrivee, date_enlevement, description,
          vehicule, aide_manutention, etages_depart, etages_arrivee, assurance_renforcee, express,
-         distance_km, transport_cts, frais_service_cts, total_cts, commission_cts, remuneration_transporteur_cts
-       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+         distance_km, transport_cts, frais_service_cts, total_cts, commission_cts, remuneration_transporteur_cts,
+         mode, depart_lat, depart_lng, arrivee_lat, arrivee_lng
+       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
        returning id, reference, jeton_suivi`,
       [
         utilisateur?.id ?? null,
@@ -87,7 +102,7 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
         f.adresse_depart,
         f.commune_arrivee,
         f.adresse_arrivee,
-        f.date_enlevement,
+        dateEnlevement,
         f.description,
         f.vehicule,
         f.aide_manutention,
@@ -101,6 +116,11 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
         devis.totalCts,
         devis.commissionCts,
         devis.remunerationTransporteurCts,
+        f.mode,
+        pointDepart?.lat ?? null,
+        pointDepart?.lng ?? null,
+        pointArrivee?.lat ?? null,
+        pointArrivee?.lng ?? null,
       ],
     );
   } catch (e) {

@@ -1,17 +1,21 @@
 "use client";
 
-import { Check, Clock, CreditCard, Lock, ShieldCheck, Truck } from "lucide-react";
-import { useActionState, useMemo, useState } from "react";
+import { ArrowLeft, ArrowRight, CalendarClock, Check, Clock, CreditCard, Lock, ShieldCheck, Truck, Zap } from "lucide-react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import { creerCommande } from "@/app/actions/commandes";
-import { COMMUNES, getCommune } from "@/lib/communes";
+import { getCommune } from "@/lib/communes";
 import { calculerDevis, euros, prochainCreneauCreux, TARIFS, VEHICULES, type VehiculeId } from "@/lib/pricing";
+import { CarteTrajet } from "./CarteTrajet";
+import { ChampAdresse, type Adresse } from "./ChampAdresse";
 
-const COMMUNES_TRIEES = [...COMMUNES].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
 // Créneaux de prise en charge proposés, toutes les 30 min de 6h à 20h.
 const CRENEAUX = Array.from({ length: 29 }, (_, i) => {
   const m = 360 + i * 30;
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 });
+const ETAPES = ["Trajet", "Quand", "Véhicule", "Options", "Coordonnées"] as const;
+// Doit correspondre au délai appliqué côté serveur pour une commande « Maintenant ».
+const DELAI_MAINTENANT_MS = 60 * 60 * 1000;
 
 const versDate = (jour: string, heure: string) => new Date(`${jour}T${heure}:00+04:00`);
 const heureDe = (d: Date) => new Date(d.getTime() + 4 * 3600 * 1000).toISOString().slice(11, 16);
@@ -31,15 +35,16 @@ function creneauParDefaut(): { jour: string; heure: string } {
   };
 }
 
-function Section({ numero, titre, children }: { numero: number; titre: string; children: React.ReactNode }) {
+// Sur mobile, une seule section est visible à la fois ; sur ordinateur, tout le formulaire.
+function Section(props: { numero: number; etape: number; titre: string; children: React.ReactNode; refSection?: React.Ref<HTMLFieldSetElement> }) {
   return (
-    <fieldset className="carte space-y-5">
-      <legend className="sr-only">{titre}</legend>
+    <fieldset ref={props.refSection} className={`carte space-y-5 ${props.numero === props.etape ? "" : "max-lg:hidden"}`}>
+      <legend className="sr-only">{props.titre}</legend>
       <h2 aria-hidden="true" className="flex items-center gap-3 text-h3 font-extrabold">
-        <span className="numero-etape">{numero}</span>
-        {titre}
+        <span className="numero-etape">{props.numero}</span>
+        {props.titre}
       </h2>
-      {children}
+      {props.children}
     </fieldset>
   );
 }
@@ -60,11 +65,34 @@ function Option(props: { name: string; titre: string; detail: string; prix: stri
   );
 }
 
+function ChoixMode(props: { actif: boolean; onClick: () => void; icone: typeof Zap; titre: string; detail: string }) {
+  const Icone = props.icone;
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      aria-pressed={props.actif}
+      className={`flex items-center gap-3 rounded-carte border-2 p-4 text-left transition ${props.actif ? "border-noir bg-jaune-clair" : "border-gris-100 hover:border-gris-300"}`}
+    >
+      <span className={`flex size-11 shrink-0 items-center justify-center rounded-bouton ${props.actif ? "bg-jaune" : "bg-gris-100"}`}>
+        <Icone className="size-6" />
+      </span>
+      <span>
+        <span className="block font-extrabold">{props.titre}</span>
+        <span className="block text-petit text-gris-500">{props.detail}</span>
+      </span>
+    </button>
+  );
+}
+
 export function FormulaireReservation() {
   const [etat, envoyer, enCours] = useActionState(creerCommande, {});
   const defaut = useMemo(creneauParDefaut, []);
-  const [depart, setDepart] = useState("saint-denis");
-  const [arrivee, setArrivee] = useState("saint-pierre");
+  const [etape, setEtape] = useState(1);
+  const sections = useRef<(HTMLFieldSetElement | null)[]>([]);
+  const [depart, setDepart] = useState<Adresse>({ libelle: "", commune: "saint-denis" });
+  const [arrivee, setArrivee] = useState<Adresse>({ libelle: "", commune: "saint-pierre" });
+  const [mode, setMode] = useState<"programme" | "maintenant">("programme");
   const [vehicule, setVehicule] = useState<VehiculeId>("moyen");
   const [jour, setJour] = useState(defaut.jour);
   const [heure, setHeure] = useState(defaut.heure);
@@ -72,14 +100,33 @@ export function FormulaireReservation() {
   const [etagesDepart, setEtagesDepart] = useState(0);
   const [etagesArrivee, setEtagesArrivee] = useState(0);
   const [assurance, setAssurance] = useState(false);
-  const [express, setExpress] = useState(false);
 
-  const demande = { depart, arrivee, vehicule, aideManutention: aide, etagesDepart, etagesArrivee, assuranceRenforcee: assurance, express };
-  const date = versDate(jour, heure);
+  const maintenant = mode === "maintenant";
+  const demande = {
+    depart: depart.commune,
+    arrivee: arrivee.commune,
+    pointDepart: depart.point,
+    pointArrivee: arrivee.point,
+    vehicule,
+    aideManutention: aide,
+    etagesDepart,
+    etagesArrivee,
+    assuranceRenforcee: assurance,
+    express: maintenant,
+  };
+  const date = maintenant ? new Date(Date.now() + DELAI_MAINTENANT_MS) : versDate(jour, heure);
   const devis = calculerDevis({ ...demande, dateEnlevement: Number.isNaN(date.getTime()) ? undefined : date });
-  const creux = devis.heurePointe ? prochainCreneauCreux(date) : null;
+  const creux = !maintenant && devis.heurePointe ? prochainCreneauCreux(date) : null;
   const devisCreux = creux ? calculerDevis({ ...demande, dateEnlevement: creux }) : null;
-  const trajet = `${getCommune(depart)?.nom} → ${getCommune(arrivee)?.nom}`;
+  const trajet = `${getCommune(depart.commune)?.nom} → ${getCommune(arrivee.commune)?.nom}`;
+
+  // Avant de passer à l'étape suivante (mobile), on vérifie les champs de l'étape en cours.
+  const continuer = () => {
+    const champs = sections.current[etape - 1]?.querySelectorAll<HTMLInputElement>("input, select, textarea");
+    for (const champ of champs ?? []) if (!champ.reportValidity()) return;
+    setEtape((e) => Math.min(e + 1, ETAPES.length));
+    window.scrollTo({ top: document.getElementById("reserver")?.offsetTop ?? 0, behavior: "smooth" });
+  };
 
   const boutonReserver = (
     <button type="submit" className="bouton w-full text-h4" disabled={enCours}>
@@ -90,48 +137,65 @@ export function FormulaireReservation() {
 
   return (
     <form action={envoyer} className="grid items-start gap-5 lg:grid-cols-[1fr_380px]">
-      <input type="hidden" name="date_enlevement" value={`${jour}T${heure}`} />
+      <input type="hidden" name="mode" value={mode} />
+      <input type="hidden" name="express" value={maintenant ? "on" : ""} />
+      <input type="hidden" name="date_enlevement" value={maintenant ? "" : `${jour}T${heure}`} />
+
       <div className="space-y-5">
-        <Section numero={1} titre="Trajet">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="etiquette" htmlFor="commune_depart">Commune de départ</label>
-              <select id="commune_depart" name="commune_depart" className="champ" value={depart} onChange={(e) => setDepart(e.target.value)}>
-                {COMMUNES_TRIEES.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="etiquette" htmlFor="commune_arrivee">Commune d&apos;arrivée</label>
-              <select id="commune_arrivee" name="commune_arrivee" className="champ" value={arrivee} onChange={(e) => setArrivee(e.target.value)}>
-                {COMMUNES_TRIEES.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="etiquette" htmlFor="adresse_depart">Adresse de départ</label>
-              <input id="adresse_depart" name="adresse_depart" className="champ" required placeholder="N°, rue, quartier" autoComplete="street-address" />
-            </div>
-            <div>
-              <label className="etiquette" htmlFor="adresse_arrivee">Adresse d&apos;arrivée</label>
-              <input id="adresse_arrivee" name="adresse_arrivee" className="champ" required placeholder="N°, rue, quartier" />
-            </div>
-            <div>
-              <label className="etiquette" htmlFor="jour">Date</label>
-              <input id="jour" type="date" className="champ" required value={jour} min={defaut.jour} onChange={(e) => setJour(e.target.value)} />
-            </div>
-            <div>
-              <label className="etiquette" htmlFor="heure">Heure de prise en charge</label>
-              <select id="heure" className="champ chiffres" value={heure} onChange={(e) => setHeure(e.target.value)}>
-                {CRENEAUX.map((c) => (
-                  <option key={c} value={c}>
-                    {c}{calculerDevis({ ...demande, dateEnlevement: versDate(jour, c) }).heurePointe ? " · heure de pointe" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
+        {/* Progression (mobile uniquement) */}
+        <div className="rounded-carte bg-blanc p-4 shadow-carte lg:hidden">
+          <p className="flex justify-between text-petit font-bold">
+            <span>Étape {etape} sur {ETAPES.length} · {ETAPES[etape - 1]}</span>
+            {etape > 1 && (
+              <button type="button" onClick={() => setEtape(etape - 1)} className="flex items-center gap-1 underline">
+                <ArrowLeft className="size-4" /> Retour
+              </button>
+            )}
+          </p>
+          <div className="mt-2 grid grid-cols-5 gap-1.5">
+            {ETAPES.map((e, i) => (
+              <span key={e} className={`h-1.5 rounded-pastille ${i < etape ? "bg-jaune" : "bg-gris-100"}`} />
+            ))}
           </div>
+        </div>
+
+        <Section numero={1} etape={etape} titre="Trajet" refSection={(el) => { sections.current[0] = el; }}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <ChampAdresse prefixe="depart" libelle="Adresse de départ" valeur={depart} onChange={setDepart} />
+            <ChampAdresse prefixe="arrivee" libelle="Adresse d'arrivée" valeur={arrivee} onChange={setArrivee} />
+          </div>
+          <CarteTrajet depart={depart.point} arrivee={arrivee.point} className="h-56 sm:h-72" />
+          {depart.point && arrivee.point && (
+            <p className="chiffres text-petit font-bold">{trajet} · environ {devis.distanceKm} km par la route</p>
+          )}
         </Section>
 
-        <Section numero={2} titre="Véhicule">
+        <Section numero={2} etape={etape} titre="Quand ?" refSection={(el) => { sections.current[1] = el; }}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ChoixMode actif={maintenant} onClick={() => setMode("maintenant")} icone={Zap} titre="Maintenant" detail={`Prise en charge dans l'heure · +${Math.round(TARIFS.expressTaux * 100)} %`} />
+            <ChoixMode actif={!maintenant} onClick={() => setMode("programme")} icone={CalendarClock} titre="Programmer" detail="Choisissez le jour et l'heure" />
+          </div>
+          {!maintenant && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="etiquette" htmlFor="jour">Date</label>
+                <input id="jour" type="date" className="champ" required value={jour} min={defaut.jour} onChange={(e) => setJour(e.target.value)} />
+              </div>
+              <div>
+                <label className="etiquette" htmlFor="heure">Heure de prise en charge</label>
+                <select id="heure" className="champ chiffres" value={heure} onChange={(e) => setHeure(e.target.value)}>
+                  {CRENEAUX.map((c) => (
+                    <option key={c} value={c}>
+                      {c}{calculerDevis({ ...demande, dateEnlevement: versDate(jour, c) }).heurePointe ? " · heure de pointe" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+        </Section>
+
+        <Section numero={3} etape={etape} titre="Véhicule" refSection={(el) => { sections.current[2] = el; }}>
           <div className="grid gap-3 sm:grid-cols-3">
             {(Object.keys(VEHICULES) as VehiculeId[]).map((id) => {
               const v = VEHICULES[id];
@@ -164,15 +228,14 @@ export function FormulaireReservation() {
           </div>
         </Section>
 
-        <Section numero={3} titre="Options">
+        <Section numero={4} etape={etape} titre="Options" refSection={(el) => { sections.current[3] = el; }}>
           <div className="grid gap-3 sm:grid-cols-2">
             <Option name="aide_manutention" titre="Aide à la manutention" detail="Une 2e personne charge avec vous" prix={`+${euros(TARIFS.aideManutentionCts)}`} coche={aide} onChange={setAide} />
-            <Option name="express" titre="Express" detail="Prise en charge sous 2 h" prix={`+${Math.round(TARIFS.expressTaux * 100)} %`} coche={express} onChange={setExpress} />
             <Option name="assurance_renforcee" titre="Assurance renforcée" detail="Pour les biens de valeur" prix={`+${euros(TARIFS.assuranceRenforceeCts)}`} coche={assurance} onChange={setAssurance} />
-            <div className="rounded-carte border-2 border-gris-100 p-4">
+            <div className="rounded-carte border-2 border-gris-100 p-4 sm:col-span-2">
               <p className="font-bold">Étages sans ascenseur</p>
               <p className="text-petit text-gris-500">{euros(TARIFS.parEtageSansAscenseurCts)} par étage</p>
-              <div className="mt-2 grid grid-cols-2 gap-2">
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:max-w-sm">
                 <label className="text-petit text-gris-500">
                   Au départ
                   <input name="etages_depart" type="number" min={0} max={30} className="champ chiffres mt-1 h-10" value={etagesDepart} onChange={(e) => setEtagesDepart(Number(e.target.value) || 0)} />
@@ -186,7 +249,7 @@ export function FormulaireReservation() {
           </div>
         </Section>
 
-        <Section numero={4} titre="Vos coordonnées">
+        <Section numero={5} etape={etape} titre="Vos coordonnées" refSection={(el) => { sections.current[4] = el; }}>
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <label className="etiquette" htmlFor="client_nom">Nom ou société</label>
@@ -205,11 +268,13 @@ export function FormulaireReservation() {
         </Section>
       </div>
 
-      <aside id="recapitulatif" className="scroll-mt-4 overflow-hidden rounded-carte bg-blanc shadow-flottante lg:sticky lg:top-4">
+      <aside id="recapitulatif" className={`scroll-mt-4 overflow-hidden rounded-carte bg-blanc shadow-flottante lg:sticky lg:top-4 ${etape === ETAPES.length ? "" : "max-lg:hidden"}`}>
         <div className="bg-noir px-6 py-5 text-blanc">
           <p className="text-petit font-extrabold tracking-widest text-jaune">VOTRE PRIX</p>
           <p className="mt-1 text-h4 font-extrabold">{trajet}</p>
-          <p className="chiffres text-petit text-gris-300">{devis.distanceKm} km · {VEHICULES[vehicule].nom}</p>
+          <p className="chiffres text-petit text-gris-300">
+            {devis.distanceKm} km · {VEHICULES[vehicule].nom} · {maintenant ? "maintenant" : `${new Date(`${jour}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} à ${heure}`}
+          </p>
         </div>
         <div className="space-y-4 p-6">
           <ul className="space-y-2 text-petit">
@@ -244,16 +309,22 @@ export function FormulaireReservation() {
         </div>
       </aside>
 
-      {/* Mobile : prix et paiement toujours visibles en bas de l'écran. */}
+      {/* Mobile : prix toujours visible ; « Continuer » jusqu'à la dernière étape, puis paiement. */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gris-100 bg-blanc px-4 pt-3 pb-4 shadow-flottante lg:hidden">
-        <a href="#recapitulatif" className="mb-2 flex items-end justify-between">
+        <p className="mb-2 flex items-end justify-between">
           <span>
             <span className="block text-petit text-gris-500">Total TTC · prix fixe</span>
             <span className="chiffres large text-h2 font-extrabold">{euros(devis.totalCts)}</span>
           </span>
-          <span className="text-petit font-bold underline">Détail</span>
-        </a>
-        {boutonReserver}
+          <span className="chiffres text-petit text-gris-500">{devis.distanceKm} km</span>
+        </p>
+        {etape < ETAPES.length ? (
+          <button type="button" onClick={continuer} className="bouton w-full text-h4">
+            Continuer <ArrowRight className="size-5" />
+          </button>
+        ) : (
+          boutonReserver
+        )}
       </div>
     </form>
   );
