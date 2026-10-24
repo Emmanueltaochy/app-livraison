@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Check, MapPin, Route, Truck, Users, Zap } from "lucide-react";
+import { ArrowRight, Box, Check, MapPin, Route, Truck, Users, Wrench, Zap } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { accepterCourse } from "@/app/actions/transporteur";
 import type { Point } from "@/lib/communes";
@@ -15,7 +15,9 @@ export type CourseDisponible = {
   description: string;
   vehicule: string;
   distanceKm: number;
-  aideManutention: boolean;
+  personnes: number;
+  volume: number | null;
+  demontage: boolean;
   express: boolean;
   gain: string;
   point: Point; // point de chargement approché (l'adresse exacte n'est révélée qu'après acceptation)
@@ -78,7 +80,9 @@ export function ListeCourses({ courses, positionInitiale, peutAccepter }: { cour
                 <p className="flex flex-wrap gap-2">
                   <Pastille icone={Route}>{c.distanceKm} km</Pastille>
                   <Pastille icone={Truck}>{c.vehicule}</Pastille>
-                  {c.aideManutention && <Pastille icone={Users} accent="bg-blanc text-noir">2 personnes</Pastille>}
+                  {c.volume != null && <Pastille icone={Box}>{c.volume.toLocaleString("fr-FR")} m³</Pastille>}
+                  {c.personnes > 1 && <Pastille icone={Users} accent="bg-blanc text-noir">{c.personnes} personnes</Pastille>}
+                  {c.demontage && <Pastille icone={Wrench}>Démontage</Pastille>}
                   {c.express && <Pastille icone={Zap} accent="bg-jaune text-noir">Express</Pastille>}
                 </p>
                 <p className="text-petit text-gris-300">{c.description}</p>

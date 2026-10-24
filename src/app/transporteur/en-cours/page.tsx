@@ -9,6 +9,8 @@ import { coursesEnCours, exigerTransporteurValide, nomCommune } from "../donnees
 import { FormulaireLivraison } from "../FormulaireLivraison";
 import { Titre } from "../Pastille";
 
+const acces = (etage: number, ascenseur: boolean) => (etage > 0 ? ` · ${etage}e étage, ${ascenseur ? "ascenseur" : "sans ascenseur"}` : "");
+
 const itineraire = (adresse: string, commune: string) =>
   `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${adresse}, ${nomCommune(commune)}, La Réunion`)}`;
 
@@ -59,7 +61,7 @@ export default async function EnCours() {
               <p className="mt-1 text-h3 font-extrabold">{c.adresse_depart}</p>
               <p className={charge ? "text-gris-300" : "text-gris-500"}>
                 {nomCommune(c.commune_depart)}
-                {c.etages_depart > 0 && ` · ${c.etages_depart}e étage, sans ascenseur`}
+                {acces(c.etages_depart, c.ascenseur_depart)}
               </p>
             </div>
             <div className={`rounded-carte p-5 ${charge ? "bg-blanc text-noir" : "bg-noir-800"}`}>
@@ -67,14 +69,23 @@ export default async function EnCours() {
               <p className="mt-1 text-h3 font-extrabold">{c.adresse_arrivee}</p>
               <p className={charge ? "text-gris-500" : "text-gris-300"}>
                 {nomCommune(c.commune_arrivee)}
-                {c.etages_arrivee > 0 && ` · ${c.etages_arrivee}e étage, sans ascenseur`}
+                {acces(c.etages_arrivee, c.ascenseur_arrivee)}
               </p>
             </div>
             <div className="flex gap-3 rounded-carte bg-noir-800 p-5">
               <Package className="size-6 shrink-0 text-jaune" />
               <p>
                 {c.description}
-                {c.aide_manutention && <span className="block text-gris-300">Aide à la manutention (2 personnes)</span>}
+                <span className="block text-gris-300">
+                  {[
+                    c.volume_m3 != null && `${Number(c.volume_m3).toLocaleString("fr-FR")} m³ · ${c.poids_kg} kg`,
+                    c.personnes > 1 && `${c.personnes} personnes`,
+                    c.demontage && "démontage et remontage",
+                    c.portage_long && "portage de plus de 30 m",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
               </p>
             </div>
             <a href={`tel:${c.client_telephone}`} className="flex h-16 items-center justify-center gap-3 rounded-carte border-2 border-blanc text-h4 font-extrabold">

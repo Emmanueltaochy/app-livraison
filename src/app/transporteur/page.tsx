@@ -70,7 +70,7 @@ export default async function Courses() {
   const [disponibles, enCours] = await Promise.all([
     requete(
       `select id, reference, commune_depart, commune_arrivee, date_enlevement, description, vehicule, distance_km,
-              aide_manutention, express, remuneration_transporteur_cts, depart_lat, depart_lng
+              personnes, volume_m3, demontage, express, remuneration_transporteur_cts, depart_lat, depart_lng
        from commandes where statut = 'payee' and transporteur_id is null
        order by date_enlevement limit 50`,
     ),
@@ -85,7 +85,9 @@ export default async function Courses() {
     description: c.description,
     vehicule: VEHICULES[c.vehicule as keyof typeof VEHICULES].nom,
     distanceKm: c.distance_km,
-    aideManutention: c.aide_manutention,
+    personnes: c.personnes,
+    volume: c.volume_m3 == null ? null : Number(c.volume_m3),
+    demontage: c.demontage,
     express: c.express,
     gain: euros(c.remuneration_transporteur_cts),
     point: approche(c.depart_lat, c.depart_lng, c.commune_depart),

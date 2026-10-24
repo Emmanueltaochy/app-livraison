@@ -1,10 +1,24 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, CalendarClock, Check, Clock, CreditCard, Lock, ShieldCheck, Truck, Zap } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarClock, Check, Clock, CreditCard, Lock, ShieldCheck, Truck, Users, Zap } from "lucide-react";
 import { useActionState, useMemo, useRef, useState } from "react";
 import { creerCommande } from "@/app/actions/commandes";
 import { getCommune } from "@/lib/communes";
-import { calculerDevis, euros, prochainCreneauCreux, TARIFS, VEHICULES, type VehiculeId } from "@/lib/pricing";
+import { decrire, resumer, type Inventaire, type TypeTransport } from "@/lib/inventaire";
+import {
+  calculerDevis,
+  dureeLisible,
+  euros,
+  personnesConseillees,
+  personnesMinimum,
+  prochainCreneauCreux,
+  TARIFS,
+  vehiculeConseille,
+  vehiculeSuffit,
+  VEHICULES,
+  type VehiculeId,
+} from "@/lib/pricing";
+import { ChoixInventaire } from "./ChoixInventaire";
 import { CarteTrajet } from "./CarteTrajet";
 import { ChampAdresse, type Adresse } from "./ChampAdresse";
 
@@ -13,7 +27,7 @@ const CRENEAUX = Array.from({ length: 29 }, (_, i) => {
   const m = 360 + i * 30;
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 });
-const ETAPES = ["Trajet", "Quand", "Véhicule", "Options", "Coordonnées"] as const;
+const ETAPES = ["Trajet", "Quoi", "Quand", "Véhicule", "Options", "Coordonnées"] as const;
 // Doit correspondre au délai appliqué côté serveur pour une commande « Maintenant ».
 const DELAI_MAINTENANT_MS = 60 * 60 * 1000;
 
@@ -93,13 +107,27 @@ export function FormulaireReservation() {
   const [depart, setDepart] = useState<Adresse>({ libelle: "", commune: "saint-denis" });
   const [arrivee, setArrivee] = useState<Adresse>({ libelle: "", commune: "saint-pierre" });
   const [mode, setMode] = useState<"programme" | "maintenant">("programme");
-  const [vehicule, setVehicule] = useState<VehiculeId>("moyen");
+  const [type, setType] = useState<TypeTransport>("objets");
+  const [inventaire, setInventaire] = useState<Inventaire>({});
+  const [vehiculeChoisi, setVehiculeChoisi] = useState<VehiculeId | null>(null);
+  const [personnesChoisies, setPersonnesChoisies] = useState<number | null>(null);
   const [jour, setJour] = useState(defaut.jour);
   const [heure, setHeure] = useState(defaut.heure);
-  const [aide, setAide] = useState(false);
   const [etagesDepart, setEtagesDepart] = useState(0);
   const [etagesArrivee, setEtagesArrivee] = useState(0);
+  const [ascenseurDepart, setAscenseurDepart] = useState(false);
+  const [ascenseurArrivee, setAscenseurArrivee] = useState(false);
+  const [portageLong, setPortageLong] = useState(false);
+  const [demontage, setDemontage] = useState(false);
   const [assurance, setAssurance] = useState(false);
+  const [alerte, setAlerte] = useState<string>();
+
+  // Le contenu impose le véhicule minimum et l'équipe minimum ; le client peut prendre plus grand.
+  const contenu = resumer(inventaire);
+  const conseille = contenu.nombre ? vehiculeConseille(contenu) : "petit";
+  const vehicule: VehiculeId = vehiculeChoisi && vehiculeSuffit(vehiculeChoisi, conseille) ? vehiculeChoisi : (conseille ?? "grand");
+  const minimumPersonnes = personnesMinimum(contenu, type);
+  const personnes = Math.max(personnesChoisies ?? personnesConseillees(contenu, type), minimumPersonnes);
 
   const maintenant = mode === "maintenant";
   const demande = {
@@ -108,9 +136,12 @@ export function FormulaireReservation() {
     pointDepart: depart.point,
     pointArrivee: arrivee.point,
     vehicule,
-    aideManutention: aide,
-    etagesDepart,
-    etagesArrivee,
+    inventaire,
+    personnes,
+    accesDepart: { etage: etagesDepart, ascenseur: ascenseurDepart },
+    accesArrivee: { etage: etagesArrivee, ascenseur: ascenseurArrivee },
+    portageLong,
+    demontage: demontage && contenu.demontage > 0,
     assuranceRenforcee: assurance,
     express: maintenant,
   };
@@ -124,6 +155,11 @@ export function FormulaireReservation() {
   const continuer = () => {
     const champs = sections.current[etape - 1]?.querySelectorAll<HTMLInputElement>("input, select, textarea");
     for (const champ of champs ?? []) if (!champ.reportValidity()) return;
+    if (ETAPES[etape - 1] === "Quoi" && (!contenu.nombre || !conseille)) {
+      setAlerte(contenu.nombre ? "Trop volumineux pour un seul voyage : contactez-nous pour un devis sur mesure." : "Ajoutez au moins un objet.");
+      return;
+    }
+    setAlerte(undefined);
     setEtape((e) => Math.min(e + 1, ETAPES.length));
     window.scrollTo({ top: document.getElementById("reserver")?.offsetTop ?? 0, behavior: "smooth" });
   };
@@ -140,6 +176,10 @@ export function FormulaireReservation() {
       <input type="hidden" name="mode" value={mode} />
       <input type="hidden" name="express" value={maintenant ? "on" : ""} />
       <input type="hidden" name="date_enlevement" value={maintenant ? "" : `${jour}T${heure}`} />
+      <input type="hidden" name="type_transport" value={type} />
+      <input type="hidden" name="inventaire" value={JSON.stringify(inventaire)} />
+      <input type="hidden" name="vehicule" value={vehicule} />
+      <input type="hidden" name="personnes" value={personnes} />
 
       <div className="space-y-5">
         {/* Progression (mobile uniquement) */}
@@ -152,7 +192,7 @@ export function FormulaireReservation() {
               </button>
             )}
           </p>
-          <div className="mt-2 grid grid-cols-5 gap-1.5">
+          <div className="mt-2 grid grid-cols-6 gap-1.5">
             {ETAPES.map((e, i) => (
               <span key={e} className={`h-1.5 rounded-pastille ${i < etape ? "bg-jaune" : "bg-gris-100"}`} />
             ))}
@@ -170,7 +210,15 @@ export function FormulaireReservation() {
           )}
         </Section>
 
-        <Section numero={2} etape={etape} titre="Quand ?" refSection={(el) => { sections.current[1] = el; }}>
+        <Section numero={2} etape={etape} titre="Quoi ?" refSection={(el) => { sections.current[1] = el; }}>
+          <ChoixInventaire type={type} onType={setType} inventaire={inventaire} onInventaire={(i) => { setInventaire(i); setAlerte(undefined); }} />
+          {contenu.nombre > 0 && !conseille && (
+            <p className="rounded-bouton bg-erreur-clair p-3 text-petit font-bold text-erreur">Plus de 20 m³ ou 1,5 t : contactez-nous pour un devis sur mesure (plusieurs voyages).</p>
+          )}
+          {alerte && <p className="rounded-bouton bg-erreur-clair p-3 text-petit font-bold text-erreur" role="alert">{alerte}</p>}
+        </Section>
+
+        <Section numero={3} etape={etape} titre="Quand ?" refSection={(el) => { sections.current[2] = el; }}>
           <div className="grid gap-3 sm:grid-cols-2">
             <ChoixMode actif={maintenant} onClick={() => setMode("maintenant")} icone={Zap} titre="Maintenant" detail={`Prise en charge dans l'heure · +${Math.round(TARIFS.expressTaux * 100)} %`} />
             <ChoixMode actif={!maintenant} onClick={() => setMode("programme")} icone={CalendarClock} titre="Programmer" detail="Choisissez le jour et l'heure" />
@@ -195,24 +243,32 @@ export function FormulaireReservation() {
           )}
         </Section>
 
-        <Section numero={3} etape={etape} titre="Véhicule" refSection={(el) => { sections.current[2] = el; }}>
+        <Section numero={4} etape={etape} titre="Véhicule" refSection={(el) => { sections.current[3] = el; }}>
           <div className="grid gap-3 sm:grid-cols-3">
             {(Object.keys(VEHICULES) as VehiculeId[]).map((id) => {
               const v = VEHICULES[id];
               const choisi = vehicule === id;
+              const possible = vehiculeSuffit(id, conseille);
               return (
-                <label key={id} className={`flex cursor-pointer flex-col rounded-carte border-2 p-4 transition ${choisi ? "border-noir shadow-[0_0_0_3px_var(--color-jaune)]" : "border-gris-100 hover:border-gris-300"}`}>
-                  <input type="radio" name="vehicule" value={id} checked={choisi} onChange={() => setVehicule(id)} className="peer sr-only" />
+                <label
+                  key={id}
+                  className={`flex flex-col rounded-carte border-2 p-4 transition ${!possible ? "cursor-not-allowed opacity-45" : "cursor-pointer"} ${choisi ? "border-noir shadow-[0_0_0_3px_var(--color-jaune)]" : "border-gris-100 hover:border-gris-300"}`}
+                >
+                  <input type="radio" name="choix_vehicule" value={id} checked={choisi} disabled={!possible} onChange={() => setVehiculeChoisi(id)} className="peer sr-only" />
                   <span className="flex items-start justify-between">
                     <span className={`flex size-11 items-center justify-center rounded-bouton ${choisi ? "bg-jaune" : "bg-gris-100"}`}>
                       <Truck className="size-6" />
                     </span>
-                    <span className={`flex size-6 items-center justify-center rounded-pastille border-2 border-noir ${choisi ? "bg-jaune" : ""}`}>
-                      {choisi && <Check className="size-3.5" strokeWidth={3} />}
-                    </span>
+                    {id === conseille && contenu.nombre > 0 ? (
+                      <span className="rounded-pastille bg-noir px-2 py-0.5 text-[0.75rem] font-extrabold text-jaune">Conseillé</span>
+                    ) : (
+                      <span className={`flex size-6 items-center justify-center rounded-pastille border-2 border-noir ${choisi ? "bg-jaune" : ""}`}>
+                        {choisi && <Check className="size-3.5" strokeWidth={3} />}
+                      </span>
+                    )}
                   </span>
                   <span className="mt-3 font-extrabold">{v.nom}</span>
-                  <span className="text-petit text-gris-500">{v.description}</span>
+                  <span className="text-petit text-gris-500">{possible ? v.description : "Trop petit pour votre chargement"}</span>
                   <span className="mt-auto flex items-baseline justify-between border-t border-gris-100 pt-3 text-petit">
                     <span className="text-gris-500">{v.charge}</span>
                     <span className="chiffres font-extrabold text-noir">dès {euros(v.minimumCts)}</span>
@@ -221,35 +277,72 @@ export function FormulaireReservation() {
               );
             })}
           </div>
-          <div>
-            <label className="etiquette" htmlFor="description">Que transportez-vous ?</label>
-            <textarea id="description" name="description" className="champ" rows={3} required placeholder="Ex. : canapé 3 places + 6 cartons (achat Leboncoin)" />
-            <p className="mt-1.5 text-petit text-gris-500">Précisez les objets lourds ou fragiles : le transporteur s&apos;organise en conséquence.</p>
-          </div>
+          {contenu.nombre > 0 && (
+            <p className="text-petit text-gris-500">
+              Votre chargement : {contenu.volume.toLocaleString("fr-FR")} m³ · {Math.round(contenu.poids)} kg{contenu.hayon ? " · hayon nécessaire" : ""}.
+            </p>
+          )}
         </Section>
 
-        <Section numero={4} etape={etape} titre="Options" refSection={(el) => { sections.current[3] = el; }}>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Option name="aide_manutention" titre="Aide à la manutention" detail="Une 2e personne charge avec vous" prix={`+${euros(TARIFS.aideManutentionCts)}`} coche={aide} onChange={setAide} />
-            <Option name="assurance_renforcee" titre="Assurance renforcée" detail="Pour les biens de valeur" prix={`+${euros(TARIFS.assuranceRenforceeCts)}`} coche={assurance} onChange={setAssurance} />
-            <div className="rounded-carte border-2 border-gris-100 p-4 sm:col-span-2">
-              <p className="font-bold">Étages sans ascenseur</p>
-              <p className="text-petit text-gris-500">{euros(TARIFS.parEtageSansAscenseurCts)} par étage</p>
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:max-w-sm">
-                <label className="text-petit text-gris-500">
-                  Au départ
-                  <input name="etages_depart" type="number" min={0} max={30} className="champ chiffres mt-1 h-10" value={etagesDepart} onChange={(e) => setEtagesDepart(Number(e.target.value) || 0)} />
-                </label>
-                <label className="text-petit text-gris-500">
-                  À l&apos;arrivée
-                  <input name="etages_arrivee" type="number" min={0} max={30} className="champ chiffres mt-1 h-10" value={etagesArrivee} onChange={(e) => setEtagesArrivee(Number(e.target.value) || 0)} />
-                </label>
-              </div>
+        <Section numero={5} etape={etape} titre="Accès et options" refSection={(el) => { sections.current[4] = el; }}>
+          <div className="rounded-carte border-2 border-gris-100 p-4">
+            <p className="flex items-center gap-2 font-bold"><Users className="size-5" /> Combien de personnes pour porter ?</p>
+            <p className="text-petit text-gris-500">
+              Le chauffeur compte pour une. {minimumPersonnes > 1 ? `Minimum ${minimumPersonnes} pour votre chargement.` : "Seul, vous aidez au chargement."} +{euros(TARIFS.personneSupplementaireCts)} par personne en plus.
+            </p>
+            <div className="mt-3 grid grid-cols-3 gap-2 sm:max-w-sm">
+              {[1, 2, 3].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  disabled={n < minimumPersonnes}
+                  aria-pressed={personnes === n}
+                  onClick={() => setPersonnesChoisies(n)}
+                  className={`h-12 rounded-bouton border-2 font-extrabold disabled:cursor-not-allowed disabled:opacity-40 ${personnes === n ? "border-noir bg-jaune" : "border-gris-100"}`}
+                >
+                  {n}
+                </button>
+              ))}
             </div>
+            {contenu.nombre > 0 && (
+              <p className="mt-2 text-petit text-gris-500">
+                Chargement et déchargement : environ {dureeLisible(devis.dureeSurPlaceMin)} à {personnes}. {VEHICULES[vehicule].minutesIncluses} min de manutention incluses, puis {euros(TARIFS.minuteManutentionCts * 60)}/h.
+              </p>
+            )}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {([
+              ["Au départ", etagesDepart, setEtagesDepart, ascenseurDepart, setAscenseurDepart, "etages_depart", "ascenseur_depart"],
+              ["À l'arrivée", etagesArrivee, setEtagesArrivee, ascenseurArrivee, setAscenseurArrivee, "etages_arrivee", "ascenseur_arrivee"],
+            ] as const).map(([titre, etage, setEtage, asc, setAsc, nomEtage, nomAsc]) => (
+              <div key={nomEtage} className="rounded-carte border-2 border-gris-100 p-4">
+                <p className="font-bold">{titre}</p>
+                <div className="mt-2 flex items-end gap-3">
+                  <label className="w-24 text-petit text-gris-500">
+                    Étage
+                    <input name={nomEtage} type="number" min={0} max={30} className="champ chiffres mt-1 h-10" value={etage} onChange={(e) => setEtage(Number(e.target.value) || 0)} />
+                  </label>
+                  <label className={`flex h-10 flex-1 items-center gap-2 text-petit font-bold ${etage === 0 ? "opacity-40" : ""}`}>
+                    <input type="checkbox" name={nomAsc} checked={asc} disabled={etage === 0} onChange={(e) => setAsc(e.target.checked)} className="size-5 accent-noir" />
+                    Ascenseur
+                  </label>
+                </div>
+                <p className="mt-1 text-[0.8rem] text-gris-500">0 = rez-de-chaussée ou maison. Sans ascenseur : +15 % de manutention par étage.</p>
+              </div>
+            ))}
+            <Option name="portage_long" titre="Camion loin de la porte" detail="Plus de 30 m à pied : +25 % de temps de manutention" prix={`+${Math.round(TARIFS.portageLongTaux * 100)} %`} coche={portageLong} onChange={setPortageLong} />
+            {contenu.demontage > 0 && (
+              <Option name="demontage" titre="Démontage et remontage" detail={`Lit, armoire, table… environ ${dureeLisible(contenu.demontage * 2)} de travail`} prix={`+${euros(contenu.demontage * 2 * TARIFS.minuteManutentionCts)}`} coche={demontage} onChange={setDemontage} />
+            )}
+            <Option name="assurance_renforcee" titre="Assurance renforcée" detail="Pour les biens de valeur" prix={`+${euros(TARIFS.assuranceRenforceeCts)}`} coche={assurance} onChange={setAssurance} />
+          </div>
+          <div>
+            <label className="etiquette" htmlFor="precisions">Précisions pour le transporteur (facultatif)</label>
+            <textarea id="precisions" name="precisions" className="champ" rows={2} placeholder="Ex. : retrait au dépôt Leroy Merlin, code portail 1234, objet fragile…" />
           </div>
         </Section>
 
-        <Section numero={5} etape={etape} titre="Vos coordonnées" refSection={(el) => { sections.current[4] = el; }}>
+        <Section numero={6} etape={etape} titre="Vos coordonnées" refSection={(el) => { sections.current[5] = el; }}>
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <label className="etiquette" htmlFor="client_nom">Nom ou société</label>
@@ -273,10 +366,11 @@ export function FormulaireReservation() {
           <p className="text-petit font-extrabold tracking-widest text-jaune">VOTRE PRIX</p>
           <p className="mt-1 text-h4 font-extrabold">{trajet}</p>
           <p className="chiffres text-petit text-gris-300">
-            {devis.distanceKm} km · {VEHICULES[vehicule].nom} · {maintenant ? "maintenant" : `${new Date(`${jour}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} à ${heure}`}
+            {devis.distanceKm} km · {VEHICULES[vehicule].nom}{contenu.nombre > 0 && ` · ${contenu.volume.toLocaleString("fr-FR")} m³`} · {maintenant ? "maintenant" : `${new Date(`${jour}T12:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} à ${heure}`}
           </p>
         </div>
         <div className="space-y-4 p-6">
+          {contenu.nombre > 0 && <p className="text-petit text-gris-500">{decrire(inventaire)}</p>}
           <ul className="space-y-2 text-petit">
             {devis.lignes.map((l) => (
               <li key={l.libelle} className="flex justify-between gap-3">

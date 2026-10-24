@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { estSurLIle, getCommune, type Point } from "@/lib/communes";
-import { calculerDevis } from "@/lib/pricing";
+import { decrire, lireInventaire, resumer } from "@/lib/inventaire";
+import { calculerDevis, personnesMinimum, vehiculeConseille, vehiculeSuffit, VEHICULES } from "@/lib/pricing";
 import { paiementDemo, stripe, stripeConfigure, urlSite } from "@/lib/stripe";
 import { utilisateurCourant } from "@/lib/auth";
 import { requete, une } from "@/lib/db";
@@ -28,11 +29,24 @@ const schema = z.object({
   arrivee_lat: coordonnee,
   arrivee_lng: coordonnee,
   date_enlevement: z.string().optional(),
-  description: z.string().trim().min(3, "Décrivez la marchandise").max(1000),
+  type_transport: z.enum(["objets", "magasin", "demenagement", "materiaux"]),
+  inventaire: z.string().transform((v, ctx) => {
+    try {
+      return lireInventaire(JSON.parse(v));
+    } catch {
+      ctx.addIssue({ code: "custom", message: "Inventaire invalide" });
+      return z.NEVER;
+    }
+  }),
+  precisions: z.string().trim().max(1000).optional(),
   vehicule: z.enum(["petit", "moyen", "grand"]),
-  aide_manutention: coche,
+  personnes: z.coerce.number().int().min(1).max(3),
   etages_depart: entier,
   etages_arrivee: entier,
+  ascenseur_depart: coche,
+  ascenseur_arrivee: coche,
+  portage_long: coche,
+  demontage: coche,
   assurance_renforcee: coche,
   express: coche,
   client_nom: z.string().trim().min(2, "Nom requis"),
@@ -57,6 +71,13 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
     if (Number.isNaN(dateEnlevement.getTime())) return { erreur: "Date invalide" };
     if (dateEnlevement.getTime() < Date.now() - 15 * 60 * 1000) return { erreur: "La date d'enlèvement est passée" };
   }
+  const contenu = resumer(f.inventaire);
+  if (contenu.nombre === 0) return { erreur: "Ajoutez au moins un objet à transporter" };
+  const conseille = vehiculeConseille(contenu);
+  if (!conseille) return { erreur: "Trop volumineux pour un seul voyage : contactez-nous pour un devis sur mesure." };
+  if (!vehiculeSuffit(f.vehicule, conseille)) return { erreur: `Il faut au minimum : ${VEHICULES[conseille].nom}` };
+  if (f.personnes < personnesMinimum(contenu, f.type_transport)) return { erreur: "Ajoutez une personne : certains objets ne se portent pas seul." };
+
   const point = (lat?: number, lng?: number): Point | undefined =>
     lat !== undefined && lng !== undefined && estSurLIle({ lat, lng }) ? { lat, lng } : undefined;
   const pointDepart = point(f.depart_lat, f.depart_lng);
@@ -67,9 +88,12 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
     depart: f.commune_depart,
     arrivee: f.commune_arrivee,
     vehicule: f.vehicule,
-    aideManutention: f.aide_manutention,
-    etagesDepart: f.etages_depart,
-    etagesArrivee: f.etages_arrivee,
+    inventaire: f.inventaire,
+    personnes: f.personnes,
+    accesDepart: { etage: f.etages_depart, ascenseur: f.ascenseur_depart },
+    accesArrivee: { etage: f.etages_arrivee, ascenseur: f.ascenseur_arrivee },
+    portageLong: f.portage_long,
+    demontage: f.demontage && contenu.demontage > 0,
     assuranceRenforcee: f.assurance_renforcee,
     express: f.express,
     dateEnlevement,
@@ -90,8 +114,11 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
          commune_depart, adresse_depart, commune_arrivee, adresse_arrivee, date_enlevement, description,
          vehicule, aide_manutention, etages_depart, etages_arrivee, assurance_renforcee, express,
          distance_km, transport_cts, frais_service_cts, total_cts, commission_cts, remuneration_transporteur_cts,
-         mode, depart_lat, depart_lng, arrivee_lat, arrivee_lng
-       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+         mode, depart_lat, depart_lng, arrivee_lat, arrivee_lng,
+         type_transport, inventaire, volume_m3, poids_kg, personnes, minutes_manutention,
+         ascenseur_depart, ascenseur_arrivee, portage_long, demontage, precisions
+       ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,
+                 $29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39)
        returning id, reference, jeton_suivi`,
       [
         utilisateur?.id ?? null,
@@ -104,9 +131,9 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
         f.commune_arrivee,
         f.adresse_arrivee,
         dateEnlevement,
-        f.description,
+        [decrire(f.inventaire), f.precisions].filter(Boolean).join(" — "),
         f.vehicule,
-        f.aide_manutention,
+        f.personnes > 1,
         f.etages_depart,
         f.etages_arrivee,
         f.assurance_renforcee,
@@ -122,6 +149,17 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
         pointDepart?.lng ?? null,
         pointArrivee?.lat ?? null,
         pointArrivee?.lng ?? null,
+        f.type_transport,
+        JSON.stringify(f.inventaire),
+        contenu.volume,
+        Math.round(contenu.poids),
+        f.personnes,
+        devis.minutesManutention,
+        f.ascenseur_depart,
+        f.ascenseur_arrivee,
+        f.portage_long,
+        f.demontage && contenu.demontage > 0,
+        f.precisions || null,
       ],
     );
   } catch (e) {
