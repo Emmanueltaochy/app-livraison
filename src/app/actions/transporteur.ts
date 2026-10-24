@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { exigerConnexion } from "@/lib/auth";
 import { requete, transaction, une } from "@/lib/db";
-import { stripe, stripeConfigure, urlSite } from "@/lib/stripe";
+import { clePublique, stripe, stripeConfigure, urlSite } from "@/lib/stripe";
 import { verserTransporteur } from "@/lib/virements";
 
 export type EtatAction = { erreur?: string; ok?: string };
@@ -74,26 +74,30 @@ async function transporteurValide(): Promise<Transporteur> {
   return t;
 }
 
+// Compte Stripe Express du transporteur (créé une seule fois) : il reçoit les virements.
+async function compteStripe(t: Transporteur): Promise<string> {
+  if (t.stripe_account_id) return t.stripe_account_id;
+  const compte = await stripe().accounts.create({
+    type: "express",
+    country: "FR",
+    capabilities: { transfers: { requested: true } },
+    business_type: "individual",
+    business_profile: { mcc: "4214", product_description: "Transport de marchandises" },
+    metadata: { transporteur_id: t.id },
+  });
+  await requete("update transporteurs set stripe_account_id = $2 where id = $1", [t.id, compte.id]);
+  return compte.id;
+}
+
+// Activation des virements : dans l'app si la clé publique est configurée, sinon page Stripe.
 export async function connecterStripe() {
   const t = await transporteurValide();
+  if (clePublique()) redirect("/transporteur/virements");
   let url: string;
   try {
     if (!stripeConfigure()) throw new Error("Stripe n'est pas configuré sur le serveur.");
-    let compteId = t.stripe_account_id;
-    if (!compteId) {
-      const compte = await stripe().accounts.create({
-        type: "express",
-        country: "FR",
-        capabilities: { transfers: { requested: true } },
-        business_type: "individual",
-        business_profile: { mcc: "4214", product_description: "Transport de marchandises" },
-        metadata: { transporteur_id: t.id },
-      });
-      compteId = compte.id;
-      await requete("update transporteurs set stripe_account_id = $2 where id = $1", [t.id, compteId]);
-    }
     const lien = await stripe().accountLinks.create({
-      account: compteId,
+      account: await compteStripe(t),
       type: "account_onboarding",
       refresh_url: `${urlSite()}/transporteur`,
       return_url: `${urlSite()}/transporteur`,
@@ -106,6 +110,21 @@ export async function connecterStripe() {
     redirect(`/transporteur?stripe_erreur=${encodeURIComponent(message.slice(0, 300))}`);
   }
   redirect(url);
+}
+
+// Session pour le formulaire d'inscription Stripe intégré à l'app (composant Connect).
+export async function sessionInscriptionStripe(): Promise<{ secret?: string; erreur?: string }> {
+  const t = await transporteurValide();
+  try {
+    const session = await stripe().accountSessions.create({
+      account: await compteStripe(t),
+      components: { account_onboarding: { enabled: true, features: { external_account_collection: true } } },
+    });
+    return { secret: session.client_secret };
+  } catch (e) {
+    console.error("sessionInscriptionStripe", e);
+    return { erreur: e instanceof Error ? e.message : "Erreur inconnue" };
+  }
 }
 
 export async function accepterCourse(form: FormData) {
