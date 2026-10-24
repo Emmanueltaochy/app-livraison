@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
-import { requete } from "@/lib/db";
+import { requete, une } from "@/lib/db";
+import { notifierNouvelleCourse } from "@/lib/nouvelleCourse";
 import { stripe } from "@/lib/stripe";
 
 // Stripe → nous : confirmation de paiement et mise à jour des comptes transporteurs.
@@ -20,11 +21,13 @@ export async function POST(req: Request) {
     if (commandeId && session.payment_status === "paid") {
       const pi = await stripe().paymentIntents.retrieve(session.payment_intent as string);
       const charge = typeof pi.latest_charge === "string" ? pi.latest_charge : pi.latest_charge?.id;
-      await requete(
+      // Stripe peut renvoyer le même événement : on ne prévient les transporteurs qu'une fois.
+      const payee = await une(
         `update commandes set statut = 'payee', payee_le = now(), stripe_charge_id = $2
-         where id = $1 and statut = 'attente_paiement'`,
+         where id = $1 and statut = 'attente_paiement' returning id`,
         [commandeId, charge ?? null],
       );
+      if (payee) await notifierNouvelleCourse(commandeId);
     }
   }
 

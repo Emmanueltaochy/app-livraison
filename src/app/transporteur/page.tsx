@@ -1,5 +1,5 @@
 import { ArrowRight, Banknote, Check, Clock, LogOut, Navigation, Package, PackageCheck, Phone, Route, Truck, Users, Zap } from "lucide-react";
-import { accepterCourse, connecterStripe, marquerEnlevee } from "@/app/actions/transporteur";
+import { accepterCourse, basculerEnLigne, connecterStripe, marquerEnlevee } from "@/app/actions/transporteur";
 import type { Transporteur } from "@/app/actions/transporteur";
 import { deconnexion } from "@/app/connexion/actions";
 import { exigerConnexion } from "@/lib/auth";
@@ -10,6 +10,7 @@ import { dateReunion, STATUTS } from "@/lib/statuts";
 import { stripe, stripeConfigure } from "@/lib/stripe";
 import { FormulaireInscription } from "./FormulaireInscription";
 import { FormulaireLivraison } from "./FormulaireLivraison";
+import { SuiviTransporteur } from "./SuiviTransporteur";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ export default async function EspaceTransporteur() {
   const u = await exigerConnexion("/transporteur");
   const t = await une<Transporteur>("select * from transporteurs where id = $1", [u.id]);
 
-  const cadre = (titre: string, contenu: React.ReactNode, sousTitre?: string) => (
+  const cadre = (titre: string, contenu: React.ReactNode, sousTitre?: string, action?: React.ReactNode) => (
     <div className="bg-noir text-blanc">
       <div className="mx-auto max-w-5xl space-y-8 px-4 pt-6 pb-14 sm:px-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -38,6 +39,7 @@ export default async function EspaceTransporteur() {
             {sousTitre && <p className="text-gris-300">{sousTitre}</p>}
             <h1 className="titre text-h2 sm:text-h1">{titre}</h1>
           </div>
+          {action}
           <form action={deconnexion}>
             <button className="flex items-center gap-2 text-petit text-gris-300 hover:text-jaune">
               <LogOut className="size-4" /> Se déconnecter
@@ -110,9 +112,28 @@ export default async function EspaceTransporteur() {
   const terminees = mesCourses.filter((c) => !["acceptee", "enlevee"].includes(c.statut));
   const gainsCts = terminees.filter((c) => c.statut === "livree").reduce((s, c) => s + c.remuneration_transporteur_cts, 0);
 
+  const pastilleEnLigne = (
+    <form action={basculerEnLigne}>
+      <input type="hidden" name="en_ligne" value={t.en_ligne ? "0" : "1"} />
+      <button
+        className={`flex h-12 items-center gap-2 rounded-pastille px-5 font-extrabold ${t.en_ligne ? "bg-succes-clair text-succes" : "bg-noir-700 text-gris-300"}`}
+        aria-label={t.en_ligne ? "Vous êtes en ligne. Passer hors ligne" : "Vous êtes hors ligne. Passer en ligne"}
+      >
+        <span className={`size-3 rounded-pastille ${t.en_ligne ? "bg-succes" : "bg-gris-500"}`} />
+        {t.en_ligne ? "En ligne" : "Hors ligne"}
+      </button>
+    </form>
+  );
+
   return cadre(
     "Courses",
     <>
+      <SuiviTransporteur enLigne={t.en_ligne} enCourse={enCours.length > 0} />
+      {!t.en_ligne && enCours.length === 0 && (
+        <p className="rounded-carte bg-noir-800 p-4 text-gris-300">
+          Passez <strong className="text-blanc">en ligne</strong> pour recevoir les courses immédiates près de vous. Les courses programmées restent visibles ci-dessous.
+        </p>
+      )}
       {!stripePret && (
         <div className="rounded-carte bg-jaune p-5 text-noir">
           <p className="flex items-center gap-3 text-h4 font-extrabold">
@@ -257,5 +278,6 @@ export default async function EspaceTransporteur() {
       </section>
     </>,
     u.email,
+    pastilleEnLigne,
   );
 }

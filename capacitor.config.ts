@@ -1,14 +1,25 @@
-// Coque mobile (iOS / Android) : l'app charge la plateforme web en ligne,
-// donc toute mise à jour du site est visible dans l'app sans republier sur les stores.
-// Les modules natifs (GPS, notifications, appareil photo) s'ajoutent via les plugins Capacitor.
-// Mise en route : voir README, section « Application mobile ».
-const config = {
+import type { CapacitorConfig } from "@capacitor/cli";
+
+// App mobile (iOS / Android) : une coque native qui charge la plateforme en ligne.
+// Toute mise à jour du site est donc visible dans l'app sans republier sur les stores ;
+// seules les fonctions natives (GPS en arrière-plan, notifications) passent par les plugins.
+const config: CapacitorConfig = {
+  // ⚠️ Identifiant définitif sur les stores : à valider avant la première publication.
   appId: "re.fretpei.app",
   appName: "FretPéi",
-  webDir: "public",
+  webDir: "mobile/www", // page « pas de connexion » embarquée
   server: {
-    url: process.env.CAPACITOR_SERVER_URL ?? "https://fretpei.re",
+    url: process.env.CAPACITOR_SERVER_URL ?? "https://livraison.taochyconsulting.fr",
     cleartext: false,
+    errorPath: "index.html",
+  },
+  android: {
+    // Évite l'arrêt du suivi GPS après 5 min en arrière-plan (plugin background-geolocation).
+    useLegacyBridge: true,
+  },
+  plugins: {
+    CapacitorCookies: { enabled: true }, // la session du site est partagée avec les requêtes natives
+    PushNotifications: { presentationOptions: ["badge", "sound", "alert"] },
   },
 };
 

@@ -18,6 +18,7 @@ export type Transporteur = {
   immatriculation: string;
   stripe_account_id: string | null;
   stripe_pret: boolean;
+  en_ligne: boolean;
 };
 
 const inscription = z.object({
@@ -127,4 +128,10 @@ export async function confirmerLivraison(_: EtatAction, form: FormData): Promise
   await verserTransporteur(livree.id);
   revalidatePath("/transporteur");
   return { ok: "Livraison confirmée" };
+}
+
+export async function basculerEnLigne(form: FormData) {
+  const t = await transporteurValide();
+  await requete("update transporteurs set en_ligne = $2 where id = $1", [t.id, form.get("en_ligne") === "1"]);
+  revalidatePath("/transporteur");
 }

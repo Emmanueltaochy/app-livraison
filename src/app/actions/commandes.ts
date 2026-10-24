@@ -8,6 +8,7 @@ import { paiementDemo, stripe, stripeConfigure, urlSite } from "@/lib/stripe";
 import { utilisateurCourant } from "@/lib/auth";
 import { requete, une } from "@/lib/db";
 import { MARQUE } from "@/lib/config";
+import { notifierNouvelleCourse } from "@/lib/nouvelleCourse";
 
 const coche = z.preprocess((v) => v === "on" || v === "true", z.boolean());
 const entier = z.coerce.number().int().min(0).max(30);
@@ -134,6 +135,7 @@ export async function creerCommande(_: EtatFormulaire, form: FormData): Promise<
   if (!stripeConfigure()) {
     if (!paiementDemo()) return { erreur: "Le paiement en ligne n'est pas encore configuré." };
     await requete("update commandes set statut = 'payee', payee_le = now() where id = $1", [commande.id]);
+    await notifierNouvelleCourse(commande.id);
     redirect(`/suivi/${commande.jeton_suivi}?paye=1`);
   }
 

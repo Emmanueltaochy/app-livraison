@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FretPéi</string>
+    <string name="title_activity_main">FretPéi</string>
+    <string name="package_name">re.fretpei.app</string>
+    <string name="custom_url_scheme">re.fretpei.app</string>
+</resources>

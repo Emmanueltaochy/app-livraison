@@ -19,6 +19,8 @@ const eslintConfig = [
       "build/**",
       "next-env.d.ts",
       "public/maplibre-gl-worker.mjs",
+      "android/**",
+      "ios/**",
     ],
   },
 ];

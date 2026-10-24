@@ -1,0 +1,71 @@
+# Construit l'app Android :
+#  - un APK de test, téléchargeable dans l'onglet Actions (à installer directement sur un téléphone) ;
+#  - un AAB signé pour le Play Store, si les secrets de signature sont configurés.
+# Secrets optionnels (Settings → Secrets and variables → Actions) :
+#   GOOGLE_SERVICES_JSON          contenu de google-services.json (Firebase, notifications push)
+#   ANDROID_KEYSTORE_BASE64       clé de signature (.jks) encodée en base64
+#   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+name: App Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - "mobile/**"
+      - "capacitor.config.ts"
+      - "package.json"
+      - ".github/workflows/android.yml"
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      VERSION_CODE: ${{ github.run_number }}
+      VERSION_NAME: 1.0.${{ github.run_number }}
+      AVEC_FIREBASE: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+      AVEC_SIGNATURE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npx cap sync android
+
+      - name: Configuration Firebase
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        if: env.AVEC_FIREBASE == 'true'
+        run: echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+
+      - name: APK de test
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fretpei-test-${{ github.run_number }}.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: AAB signé (Play Store)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        if: env.AVEC_SIGNATURE == 'true'
+        working-directory: android
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/fretpei.jks"
+          ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/fretpei.jks" ./gradlew bundleRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        if: env.AVEC_SIGNATURE == 'true'
+        with:
+          name: fretpei-play-store-${{ github.run_number }}.aab
+          path: android/app/build/outputs/bundle/release/app-release.aab

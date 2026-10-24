@@ -47,7 +47,7 @@ jobs:
         # Seul /opt/fretpei est touché : les autres applications du VPS ne sont jamais modifiées.
         run: |
           rsync -az --delete \
-            --exclude .git --exclude node_modules --exclude .next --exclude .env --exclude sauvegardes \
+            --exclude .git --exclude node_modules --exclude .next --exclude .env --exclude sauvegardes --exclude android --exclude ios --exclude mobile \
             -e "ssh -i ~/.ssh/id_deploiement -p $PORT_SSH" \
             ./ "$CIBLE:/opt/fretpei/"
       - name: Reconstruire et redémarrer

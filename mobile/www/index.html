@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>FretPéi</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+           gap: 16px; background: #121212; color: #fff; font-family: system-ui, sans-serif; text-align: center; padding: 24px; }
+    button { height: 56px; padding: 0 24px; border: 0; border-radius: 12px; background: #ffc800; color: #121212; font-weight: 800; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <!-- Affiché seulement si le site est injoignable (l'app charge normalement la plateforme en ligne). -->
+  <svg viewBox="0 0 48 48" width="72" height="72" aria-hidden="true"><rect width="48" height="48" rx="12" fill="#FFC800"/><circle cx="10.5" cy="36" r="4.25" fill="#121212"/><path d="M18 36H29a6 6 0 0 0 0-12H19a6 6 0 0 1 0-12h12" fill="none" stroke="#121212" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M29 6.5 34.5 12 29 17.5" fill="none" stroke="#121212" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <h1>Pas de connexion</h1>
+  <p>Vérifiez votre connexion Internet puis réessayez.</p>
+  <button onclick="location.reload()">Réessayer</button>
+</body>
+</html>

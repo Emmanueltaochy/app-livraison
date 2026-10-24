@@ -56,3 +56,13 @@ export type Point = { lat: number; lng: number };
 export function estSurLIle(p: Point): boolean {
   return p.lat > -21.42 && p.lat < -20.85 && p.lng > 55.2 && p.lng < 55.85;
 }
+
+// Distance à vol d'oiseau entre deux points, en km.
+export function haversineKm(a: Point, b: Point): number {
+  const R = 6371;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
