@@ -151,7 +151,7 @@ GitHub construit, signe et envoie l'app sur TestFlight depuis ses propres Mac.
    → **+** → nom « GitHub », accès **Admin** → télécharger `AuthKey_XXXX.p8` (une seule fois),
    noter le **Key ID** et l'**Issuer ID**.
 4. **Secrets GitHub** : `APPLE_TEAM_ID`, `APPSTORE_API_KEY_ID`, `APPSTORE_API_ISSUER_ID`,
-   `APPSTORE_API_KEY_P8` (sur Mac : `base64 -i AuthKey_XXXX.p8 | pbcopy`, puis coller).
+   `APPSTORE_API_KEY_P8` (tout le texte du fichier `.p8`, lignes BEGIN et END comprises).
 5. **Actions → TestFlight iPhone → Run workflow** (≈ 10 min), puis 10 à 30 min de traitement chez Apple.
 6. Sur l'iPhone : app **TestFlight** → FretPéi → *Installer* (ajoute-toi d'abord comme testeur interne
    dans App Store Connect → TestFlight).
