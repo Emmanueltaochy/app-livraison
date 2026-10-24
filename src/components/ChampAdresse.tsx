@@ -10,18 +10,44 @@ type Suggestion = { libelle: string; commune: string; point: Point };
 
 const COMMUNES_TRIEES = [...COMMUNES].sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
 
-// Base Adresse Nationale (gratuite, sans clé) : on oriente vers La Réunion et on écarte la métropole.
+// Géocodage de l'IGN (Géoplateforme, gratuit, sans clé), et l'ancienne API de la Base Adresse Nationale
+// en secours. On oriente la recherche vers La Réunion et on écarte la métropole.
+const SERVICES = ["https://data.geopf.fr/geocodage/search", "https://api-adresse.data.gouv.fr/search/"];
+const DELAI_MS = 5000;
+
+type Reponse = { features: { geometry: { coordinates: [number, number] }; properties: { label: string; citycode: string } }[] };
+
 async function chercher(q: string, signal: AbortSignal): Promise<Suggestion[]> {
-  const url = `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=10&autocomplete=1&lat=-21.13&lon=55.53`;
-  const res = await fetch(url, { signal });
-  if (!res.ok) return [];
-  const json = (await res.json()) as {
-    features: { geometry: { coordinates: [number, number] }; properties: { label: string; citycode: string } }[];
-  };
+  const parametres = `?q=${encodeURIComponent(q)}&limit=20&autocomplete=1&lat=-21.13&lon=55.53`;
+  let json: Reponse | null = null;
+  for (const service of SERVICES) {
+    try {
+      // Délai maximum par service (sans AbortSignal.any, absent des anciens iPhone).
+      const limite = new AbortController();
+      const arreter = () => limite.abort();
+      signal.addEventListener("abort", arreter);
+      const minuteur = setTimeout(arreter, DELAI_MS);
+      try {
+        const res = await fetch(service + parametres, { signal: limite.signal });
+        if (res.ok) {
+          json = await res.json();
+          break;
+        }
+      } finally {
+        clearTimeout(minuteur);
+        signal.removeEventListener("abort", arreter);
+      }
+    } catch (e) {
+      if (signal.aborted) throw e; // nouvelle saisie : on abandonne cette recherche
+    }
+  }
+  if (!json) throw new Error("Service d'adresses indisponible");
+  const vues = new Set<string>();
   return json.features
     .map((f) => {
       const commune = communeParInsee(f.properties.citycode);
-      if (!commune) return null;
+      if (!commune || vues.has(f.properties.label)) return null;
+      vues.add(f.properties.label);
       const [lng, lat] = f.geometry.coordinates;
       return { libelle: f.properties.label, commune: commune.id, point: { lat, lng } };
     })
@@ -49,6 +75,7 @@ export function ChampAdresse({
   const [actif, setActif] = useState(0);
   const [chargement, setChargement] = useState(false);
   const [focus, setFocus] = useState(false);
+  const [message, setMessage] = useState<string>();
   // Libellé de la dernière suggestion choisie : inutile de relancer une recherche dessus.
   const choisie = useRef(valeur.libelle);
 
@@ -56,19 +83,23 @@ export function ChampAdresse({
     const q = saisie.trim();
     if (q.length < 4 || q === choisie.current) {
       setSuggestions([]);
+      setMessage(undefined);
       return;
     }
     const controle = new AbortController();
     const minuteur = setTimeout(async () => {
       setChargement(true);
       try {
-        setSuggestions(await chercher(q, controle.signal));
+        const resultats = await chercher(q, controle.signal);
+        setSuggestions(resultats);
+        setMessage(resultats.length ? undefined : "Aucune adresse trouvée à La Réunion : ajoutez la commune (ex. « 12 rue de Paris Saint-Denis »).");
         setActif(0);
         setOuvert(true);
       } catch {
         // Service indisponible : la saisie libre + choix de la commune reste possible.
+        if (!controle.signal.aborted) setMessage("Recherche d'adresse momentanément indisponible : saisissez l'adresse puis choisissez la commune.");
       } finally {
-        setChargement(false);
+        if (!controle.signal.aborted) setChargement(false);
       }
     }, 250);
     return () => {
@@ -155,6 +186,8 @@ export function ChampAdresse({
           ))}
         </ul>
       )}
+
+      {message && focus && <p className="mt-1.5 text-petit text-alerte" role="status">{message}</p>}
 
       {/* Sans adresse reconnue, la commune suffit pour estimer le prix. */}
       {sansPoint ? (
