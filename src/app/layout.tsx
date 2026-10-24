@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo } from "next/font/google";
+import { Suspense } from "react";
+import { BarreChargement } from "@/components/BarreChargement";
 import { MARQUE, SLOGAN } from "@/lib/config";
 import "./globals.css";
 
@@ -18,7 +20,12 @@ export const viewport: Viewport = { themeColor: "#121212", width: "device-width"
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="fr" className={archivo.variable}>
-      <body className="flex min-h-dvh flex-col font-sans antialiased">{children}</body>
+      <body className="flex min-h-dvh flex-col font-sans antialiased">
+        <Suspense>
+          <BarreChargement />
+        </Suspense>
+        {children}
+      </body>
     </html>
   );
 }

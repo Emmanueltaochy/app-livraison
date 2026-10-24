@@ -22,6 +22,8 @@ export type Transporteur = {
   stripe_account_id: string | null;
   stripe_pret: boolean;
   en_ligne: boolean;
+  position_lat: number | null;
+  position_lng: number | null;
 };
 
 const inscription = z.object({

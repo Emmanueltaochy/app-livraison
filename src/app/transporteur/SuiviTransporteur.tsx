@@ -70,6 +70,8 @@ export function SuiviTransporteur({ enLigne, enCourse }: { enLigne: boolean; enC
     if (!actif) return;
     const recevoir = (p: Position) => {
       setPartage("actif");
+      // La carte du chauffeur suit la même position (évite un 2e suivi GPS).
+      window.dispatchEvent(new CustomEvent("fretpei:position", { detail: { lat: p.latitude, lng: p.longitude } }));
       if (Date.now() - dernierEnvoi.current < ENVOI_MIN_MS) return;
       dernierEnvoi.current = Date.now();
       envoyerPosition(p);

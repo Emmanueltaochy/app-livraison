@@ -3,6 +3,8 @@ import Link from "next/link";
 import { marquerEnlevee } from "@/app/actions/transporteur";
 import { euros } from "@/lib/pricing";
 import { dateReunion } from "@/lib/statuts";
+import { getCommune } from "@/lib/communes";
+import { CarteChauffeur } from "../CarteChauffeur";
 import { coursesEnCours, exigerTransporteurValide, nomCommune } from "../donnees";
 import { FormulaireLivraison } from "../FormulaireLivraison";
 import { Titre } from "../Pastille";
@@ -30,6 +32,10 @@ export default async function EnCours() {
       )}
       {courses.map((c) => {
         const charge = c.statut === "enlevee";
+        // Cible du moment : le chargement, puis la livraison une fois la marchandise chargée.
+        const [lat, lng, commune] = charge ? [c.arrivee_lat, c.arrivee_lng, c.commune_arrivee] : [c.depart_lat, c.depart_lng, c.commune_depart];
+        const cible = lat != null && lng != null ? { lat, lng } : getCommune(commune)!;
+        const ici = t.position_lat != null && t.position_lng != null ? { lat: t.position_lat, lng: t.position_lng } : undefined;
         return (
           <section key={c.id} aria-label={`Course ${c.reference}`} className="space-y-3">
             <div className="flex items-end justify-between gap-3">
@@ -39,6 +45,13 @@ export default async function EnCours() {
               </div>
               <p className="chiffres large text-h2 font-extrabold text-jaune">{euros(c.remuneration_transporteur_cts)}</p>
             </div>
+            <CarteChauffeur
+              cibles={[{ id: c.id, point: { lat: cible.lat, lng: cible.lng }, etiquette: charge ? "Livraison" : "Chargement" }]}
+              selection={c.id}
+              positionInitiale={ici}
+              libelleCible={charge ? "point de livraison" : "point de chargement"}
+              className="h-[38vh] min-h-60"
+            />
             <div className={`rounded-carte p-5 ${charge ? "bg-noir-800" : "bg-blanc text-noir"}`}>
               <p className={`text-petit font-extrabold tracking-wider ${charge ? "text-gris-300" : ""}`}>
                 CHARGEMENT · {dateReunion(c.date_enlevement).toUpperCase()}
