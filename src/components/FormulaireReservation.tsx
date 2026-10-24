@@ -361,7 +361,7 @@ export function FormulaireReservation() {
         </Section>
       </div>
 
-      <aside id="recapitulatif" className={`scroll-mt-4 overflow-hidden rounded-carte bg-blanc shadow-flottante lg:sticky lg:top-4 ${etape === ETAPES.length ? "" : "max-lg:hidden"}`}>
+      <aside id="recapitulatif" className={`scroll-mt-4 overflow-hidden rounded-carte bg-blanc shadow-flottante lg:sticky lg:top-24 ${etape === ETAPES.length ? "" : "max-lg:hidden"}`}>
         <div className="bg-noir px-6 py-5 text-blanc">
           <p className="text-petit font-extrabold tracking-widest text-jaune">VOTRE PRIX</p>
           <p className="mt-1 text-h4 font-extrabold">{trajet}</p>

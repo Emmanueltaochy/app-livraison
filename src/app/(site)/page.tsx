@@ -1,4 +1,4 @@
-import { ArrowRight, KeyRound, ShieldCheck, Store, Tag, Truck } from "lucide-react";
+import { ArrowRight, Building2, Hammer, KeyRound, MapPinned, ShieldCheck, Sofa, Store, Tag, Truck } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -47,8 +47,48 @@ export default async function Accueil({ searchParams }: { searchParams: Promise<
             Paiement annulé : votre commande n&apos;a pas été validée.
           </p>
         )}
-        <section id="reserver" aria-label="Réserver un transport" className="scroll-mt-4">
+        <section id="reserver" aria-label="Réserver un transport" className="scroll-mt-24">
           <FormulaireReservation />
+        </section>
+
+        <section aria-labelledby="comment" className="space-y-6 pt-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 id="comment" className="titre text-h2">Comment ça marche</h2>
+            <Link href="/comment-ca-marche" className="flex items-center gap-1 font-bold underline">En savoir plus <ArrowRight className="size-4" /></Link>
+          </div>
+          <ol className="grid gap-5 md:grid-cols-3">
+            {[
+              { icone: Tag, titre: "Votre prix tout de suite", texte: "Adresses, objets, créneau : le véhicule et le prix sont calculés en direct." },
+              { icone: MapPinned, titre: "Suivez le camion en direct", texte: "Un transporteur vérifié accepte : vous voyez son nom et son arrivée sur la carte." },
+              { icone: KeyRound, titre: "Code à la livraison", texte: "Vous vérifiez la marchandise puis donnez votre code. Le transporteur est payé ensuite." },
+            ].map(({ icone: Icone, titre, texte }, i) => (
+              <li key={titre} className="carte flex gap-4">
+                <span className="numero-etape shrink-0">{i + 1}</span>
+                <div>
+                  <h3 className="flex items-center gap-2 font-extrabold"><Icone className="size-5" /> {titre}</h3>
+                  <p className="mt-1 text-petit text-gris-500">{texte}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section aria-labelledby="quoi" className="space-y-6">
+          <h2 id="quoi" className="titre text-h2">Ce que nous transportons</h2>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {[
+              { icone: Sofa, titre: "Meubles et électroménager", texte: "Un canapé, un frigo, un achat Leboncoin" },
+              { icone: Store, titre: "Livraisons magasin", texte: "Vos achats livrés le jour même" },
+              { icone: Building2, titre: "Déménagements", texte: "Studio, T2 : tout le logement" },
+              { icone: Hammer, titre: "Palettes et matériaux", texte: "Chantier, BTP, camion avec hayon" },
+            ].map(({ icone: Icone, titre, texte }) => (
+              <Link key={titre} href="/#reserver" className="carte group space-y-2 transition hover:shadow-flottante">
+                <span className="flex size-11 items-center justify-center rounded-bouton bg-jaune"><Icone className="size-5" /></span>
+                <h3 className="font-extrabold">{titre}</h3>
+                <p className="text-petit text-gris-500">{texte}</p>
+              </Link>
+            ))}
+          </div>
         </section>
 
         <section id="pro" className="grid scroll-mt-4 gap-5 md:grid-cols-2">
@@ -58,9 +98,9 @@ export default async function Accueil({ searchParams }: { searchParams: Promise<
             <p className="mt-2 max-w-md">
               Livrez vos clients le jour même. Réservez en quelques secondes depuis l&apos;ordinateur de la caisse.
             </p>
-            <a href="#reserver" className="bouton-noir mt-6">
-              Réserver une livraison <ArrowRight className="size-4" />
-            </a>
+            <Link href="/entreprises" className="bouton-noir mt-6">
+              Découvrir l&apos;offre magasins <ArrowRight className="size-4" />
+            </Link>
           </div>
           <div className="rounded-panneau bg-noir p-8 text-blanc">
             <Truck className="size-8 text-jaune" />
@@ -68,7 +108,7 @@ export default async function Accueil({ searchParams }: { searchParams: Promise<
             <p className="mt-2 max-w-md text-gris-300">
               Devenez transporteur. Choisissez vos courses, voyez le montant avant d&apos;accepter, soyez payé après chaque livraison.
             </p>
-            <Link href="/transporteur" className="bouton mt-6 h-12">
+            <Link href="/devenir-transporteur" className="bouton mt-6 h-12">
               Devenir transporteur <ArrowRight className="size-4" />
             </Link>
           </div>
