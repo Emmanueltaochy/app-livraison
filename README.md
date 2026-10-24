@@ -139,14 +139,35 @@ Sans cette configuration, l'app fonctionne mais les notifications sont seulement
 4. Fiche Play Store : déclarer l'usage de la **localisation en arrière-plan** (partage de position
    pendant les courses) et fournir la politique de confidentialité.
 
-### iOS (sur Mac avec Xcode)
+### iOS : tester sur ton iPhone (Mac + Xcode)
 
 ```bash
+git clone https://github.com/Emmanueltaochy/app-livraison.git && cd app-livraison
 npm install && npx cap sync ios && npx cap open ios
 ```
-Dans Xcode : choisir l'équipe Apple Developer, activer les capacités *Push Notifications* et
-*Background Modes → Location updates*, puis *Product → Archive* pour l'envoyer sur App Store Connect.
-Notifications iOS : à finaliser (jeton APNs → Firebase), prochaine étape côté iPhone.
+Dans Xcode :
+1. *App* (cible) → **Signing & Capabilities** → *Team* : ton équipe Apple Developer (celle de Swap'îles).
+   L'identifiant `re.fretpei.app` est enregistré automatiquement.
+2. Vérifier les capacités **Push Notifications** et **Background Modes → Location updates**
+   (déjà déclarées dans le projet ; les ajouter avec « + Capability » si Xcode ne les affiche pas).
+3. Brancher l'iPhone, le choisir en haut, puis ▶︎ **Run**. Au premier lancement :
+   *Réglages → Général → VPN et gestion de l'appareil* → faire confiance au développeur.
+
+Pour TestFlight / App Store : *Product → Archive → Distribute App*.
+La compilation est aussi vérifiée automatiquement sur GitHub (**Actions → App iOS**).
+
+### Notifications iPhone (APNs)
+
+1. https://developer.apple.com/account → *Keys* → **+** → cocher *Apple Push Notifications service (APNs)*
+   → télécharger le fichier `.p8` (une seule fois possible) et noter le **Key ID**.
+2. Noter le **Team ID** (*Membership details*).
+3. Sur le VPS, ajouter à `/opt/fretpei/.env` puis `docker compose up -d` :
+   ```
+   APNS_CLE=<contenu du .p8 encodé en base64 : base64 -i AuthKey_XXXX.p8>
+   APNS_CLE_ID=<Key ID>
+   APNS_EQUIPE_ID=<Team ID>
+   ```
+Une même clé APNs sert pour toutes tes apps (Swap'îles compris) : tu peux réutiliser celle que tu as déjà.
 
 ## Commandes utiles
 

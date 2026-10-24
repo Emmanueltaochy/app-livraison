@@ -2,7 +2,7 @@ import "server-only";
 import { getCommune } from "./communes";
 import { requete, une } from "./db";
 import { choisirTransporteurs, type Candidat } from "./dispatch";
-import { envoyerPush } from "./notifications";
+import { envoyerPush, type Appareil } from "./notifications";
 import { euros, type VehiculeId } from "./pricing";
 import { urlSite } from "./stripe";
 
@@ -40,10 +40,10 @@ export async function notifierNouvelleCourse(commandeId: string): Promise<void> 
     const ids = choisirTransporteurs(candidats, { vehicule: c.vehicule, mode: c.mode, depart });
     if (ids.length === 0) return;
 
-    const jetons = await requete<{ jeton: string }>("select jeton from appareils where utilisateur_id = any($1::uuid[])", [ids]);
+    const appareils = await requete<Appareil>("select jeton, plateforme from appareils where utilisateur_id = any($1::uuid[])", [ids]);
     const trajet = `${getCommune(c.commune_depart)?.nom} → ${getCommune(c.commune_arrivee)?.nom}`;
     await envoyerPush(
-      jetons.map((j) => j.jeton),
+      appareils,
       {
         titre: c.mode === "maintenant" ? `Course immédiate · ${euros(c.remuneration_transporteur_cts)}` : `Nouvelle course · ${euros(c.remuneration_transporteur_cts)}`,
         corps: trajet,
