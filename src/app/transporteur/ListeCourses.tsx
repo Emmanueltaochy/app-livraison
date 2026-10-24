@@ -28,7 +28,7 @@ export type CourseDisponible = {
 export function ListeCourses({ courses, positionInitiale, peutAccepter }: { courses: CourseDisponible[]; positionInitiale?: Point; peutAccepter: boolean }) {
   const [selection, setSelection] = useState<string>();
   const zoneCarte = useRef<HTMLDivElement>(null);
-  const cibles = useMemo<Cible[]>(() => courses.map((c) => ({ id: c.id, point: c.point, etiquette: c.gain })), [courses]);
+  const cibles = useMemo<Cible[]>(() => courses.map((c) => ({ id: c.id, point: c.point, etiquette: c.gain, detail: `Puis la course : ${c.distanceKm} km jusqu'à ${c.arrivee}` })), [courses]);
 
   const choisir = useCallback((id: string) => {
     setSelection((s) => (s === id ? undefined : id));

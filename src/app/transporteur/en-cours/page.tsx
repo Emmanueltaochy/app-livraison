@@ -1,18 +1,16 @@
-import { ListChecks, Navigation, Package, PackageCheck, Phone } from "lucide-react";
+import { ListChecks, Package, PackageCheck, Phone } from "lucide-react";
 import Link from "next/link";
 import { marquerEnlevee } from "@/app/actions/transporteur";
 import { euros } from "@/lib/pricing";
 import { dateReunion } from "@/lib/statuts";
 import { getCommune } from "@/lib/communes";
+import { BoutonsNavigation } from "../BoutonsNavigation";
 import { CarteChauffeur } from "../CarteChauffeur";
 import { coursesEnCours, exigerTransporteurValide, nomCommune } from "../donnees";
 import { FormulaireLivraison } from "../FormulaireLivraison";
 import { Titre } from "../Pastille";
 
 const acces = (etage: number, ascenseur: boolean) => (etage > 0 ? ` · ${etage}e étage, ${ascenseur ? "ascenseur" : "sans ascenseur"}` : "");
-
-const itineraire = (adresse: string, commune: string) =>
-  `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${adresse}, ${nomCommune(commune)}, La Réunion`)}`;
 
 // Onglet « En cours » : chargement puis livraison, étape par étape.
 export default async function EnCours() {
@@ -52,8 +50,10 @@ export default async function EnCours() {
               selection={c.id}
               positionInitiale={ici}
               libelleCible={charge ? "point de livraison" : "point de chargement"}
-              className="h-[38vh] min-h-60"
+              lienExterne={false}
+              className="h-[34vh] min-h-56"
             />
+            <BoutonsNavigation destination={{ lat: cible.lat, lng: cible.lng }} libelle={charge ? "Livraison" : "Chargement"} />
             <div className={`rounded-carte p-5 ${charge ? "bg-noir-800" : "bg-blanc text-noir"}`}>
               <p className={`text-petit font-extrabold tracking-wider ${charge ? "text-gris-300" : ""}`}>
                 CHARGEMENT · {dateReunion(c.date_enlevement).toUpperCase()}
@@ -91,24 +91,14 @@ export default async function EnCours() {
             <a href={`tel:${c.client_telephone}`} className="flex h-16 items-center justify-center gap-3 rounded-carte border-2 border-blanc text-h4 font-extrabold">
               <Phone className="size-6" /> Appeler {c.client_nom.split(" ")[0]} · {c.client_telephone}
             </a>
-            <div className={`grid gap-3 ${charge ? "" : "grid-cols-[1fr_1.4fr]"}`}>
-              <a
-                href={charge ? itineraire(c.adresse_arrivee, c.commune_arrivee) : itineraire(c.adresse_depart, c.commune_depart)}
-                target="_blank"
-                rel="noreferrer"
-                className="flex h-16 items-center justify-center gap-2 rounded-carte border-2 border-blanc font-extrabold"
-              >
-                <Navigation className="size-5" /> Itinéraire
-              </a>
-              {!charge && (
-                <form action={marquerEnlevee}>
-                  <input type="hidden" name="id" value={c.id} />
-                  <button className="bouton h-16 w-full rounded-carte text-h4">
-                    <PackageCheck className="size-6" /> Marchandise chargée
-                  </button>
-                </form>
-              )}
-            </div>
+            {!charge && (
+              <form action={marquerEnlevee}>
+                <input type="hidden" name="id" value={c.id} />
+                <button className="bouton h-16 w-full rounded-carte text-h4">
+                  <PackageCheck className="size-6" /> Marchandise chargée
+                </button>
+              </form>
+            )}
             {charge && <FormulaireLivraison id={c.id} commune={nomCommune(c.commune_arrivee)} />}
           </section>
         );

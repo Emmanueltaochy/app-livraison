@@ -2,14 +2,14 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { GeoJSONSource, Map as CarteMapLibre, Marker } from "maplibre-gl";
-import { Clock, ExternalLink, LocateFixed, Route } from "lucide-react";
+import { ExternalLink, LocateFixed } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { haversineKm, type Point } from "@/lib/communes";
 
 const STYLE = "https://tiles.openfreemap.org/styles/positron";
 const CENTRE_REUNION: [number, number] = [55.53, -21.13];
 
-export type Cible = { id: string; point: Point; etiquette: string };
+export type Cible = { id: string; point: Point; etiquette: string; detail?: string };
 type Trajet = { minutes: number; km: number; ligne: [number, number][]; estime: boolean };
 
 // Itinéraire routier calculé par notre serveur (OSRM) ; à défaut, estimation.
@@ -48,6 +48,7 @@ export function CarteChauffeur({
   onSelection,
   positionInitiale,
   libelleCible = "chargement",
+  lienExterne = true,
   className = "",
 }: {
   cibles: Cible[];
@@ -55,6 +56,7 @@ export function CarteChauffeur({
   onSelection?: (id: string) => void;
   positionInitiale?: Point;
   libelleCible?: string;
+  lienExterne?: boolean;
   className?: string;
 }) {
   const conteneur = useRef<HTMLDivElement>(null);
@@ -84,6 +86,8 @@ export function CarteChauffeur({
       m.addControl(new AttributionControl({ compact: true }), "top-left");
       m.on("dragstart", () => (suivre.current = false));
       m.on("load", () => {
+        // Mention repliée en « i » dès l'affichage (MapLibre la déplie au chargement).
+        m.getContainer().querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");
         m.addSource("trajet", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         m.addLayer({ id: "trajet-bord", type: "line", source: "trajet", paint: { "line-color": "#121212", "line-width": 8 }, layout: { "line-cap": "round", "line-join": "round" } });
         m.addLayer({ id: "trajet", type: "line", source: "trajet", paint: { "line-color": "#FFC800", "line-width": 4.5 }, layout: { "line-cap": "round", "line-join": "round" } });
@@ -204,29 +208,32 @@ export function CarteChauffeur({
       {choisie && (
         <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 rounded-carte bg-noir/95 p-3 shadow-carte">
           <div className="min-w-0">
-            <p className="text-[0.7rem] font-extrabold tracking-wider text-gris-300">JUSQU&apos;AU {libelleCible.toUpperCase()}</p>
+            {/* Temps pour rejoindre le point, pas la durée de la course : formulé en toutes lettres. */}
             {trajet ? (
-              <p className="flex flex-wrap items-center gap-x-3 font-extrabold">
-                <span className="flex items-center gap-1 text-h4 text-jaune">
-                  <Clock className="size-5" /> {trajet.estime && "≈ "}
+              <p className="font-bold leading-snug">
+                🚚 Vous êtes à{" "}
+                <span className="chiffres font-extrabold">
+                  {trajet.estime && "≈ "}
                   {trajet.minutes} min
-                </span>
-                <span className="flex items-center gap-1">
-                  <Route className="size-4" /> {trajet.km.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km
-                </span>
+                </span>{" "}
+                du {libelleCible} <span className="font-normal text-gris-300">· {trajet.km.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km</span>
               </p>
             ) : (
               <p className="text-gris-300">{moi ? "Calcul du trajet…" : "Activez la localisation"}</p>
             )}
+            {choisie.detail && <p className="mt-0.5 text-petit text-gris-300">{choisie.detail}</p>}
           </div>
-          <a
-            href={lienGoogleMaps(choisie.point)}
-            target="_blank"
-            rel="noreferrer"
-            className="flex h-11 shrink-0 items-center gap-1.5 rounded-bouton bg-jaune px-3 text-petit font-extrabold text-noir"
-          >
-            Google Maps <ExternalLink className="size-4" />
-          </a>
+          {lienExterne && (
+            <a
+              href={lienGoogleMaps(choisie.point)}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Ouvrir dans Google Maps"
+              className="flex size-11 shrink-0 items-center justify-center rounded-pastille bg-jaune text-noir"
+            >
+              <ExternalLink className="size-5" />
+            </a>
+          )}
         </div>
       )}
     </div>
